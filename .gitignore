@@ -1,0 +1,6 @@
+target/
+node_modules/
+witness/rust/src/generated/
+witness/rust/Cargo.lock
+test/fixtures/target/
+test/fixtures/generated/

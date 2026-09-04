@@ -1,0 +1,27 @@
+name: ci
+on: { push: { branches: [main, dev] }, pull_request: {} }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm test
+      - run: node src/cli.mjs generate --config test/fixtures/contracts.config.json
+      - uses: dtolnay/rust-toolchain@stable
+      - run: scripts/rust-witness.sh test/fixtures/generated
+  db-witness:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get install -y -q postgresql-client >/dev/null
+      - run: node src/cli.mjs db-check --config test/fixtures/contracts.config.json --database-url postgresql://postgres:postgres@localhost:5432/postgres

@@ -1,0 +1,22 @@
+[package]
+org = "ORESoftware"
+name = "ores-contracts"
+version = "0.1.0"
+kind = "library"
+language = "typescript"
+
+[package.repository]
+url = "https://github.com/ORESoftware/ores-contracts"
+
+[dependencies]
+
+[build]
+command = "npm test"
+
+[publish]
+include = ["src/**", "typespec/**", "lib/**", "witness/**", "scripts/**", "templates/**", "package.json", "README.md", "LICENSE", "docs/**"]
+
+[scripts]
+test = "npm test"
+check = "node src/cli.mjs check"
+generate = "node src/cli.mjs generate"

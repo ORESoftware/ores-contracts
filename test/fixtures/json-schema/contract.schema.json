@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "x-ores-namespace": "Acme.Billing",
+  "$defs": {
+    "InvoiceStatus": { "type": "string", "enum": ["draft", "issued", "paid"] },
+    "Customer": {
+      "type": "object", "additionalProperties": false, "description": "A customer that can be invoiced.",
+      "x-ores-table": "customers", "x-ores-primary-key": ["id"], "x-ores-unique": [["email"]],
+      "required": ["id", "email", "createdAt", "tags"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "email": { "type": "string", "maxLength": 320 },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Invoice": {
+      "type": "object", "additionalProperties": false,
+      "x-ores-table": "invoices", "x-ores-primary-key": ["id"], "x-ores-indexes": [["customerId", "issuedOn"]],
+      "required": ["id", "customerId", "status", "amountCents"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "customerId": { "type": "string", "format": "uuid", "x-ores-references": "Customer.id" },
+        "status": { "$ref": "#/$defs/InvoiceStatus" },
+        "amountCents": { "type": "integer", "x-ores-width": 64 },
+        "issuedOn": { "type": "string", "format": "date" },
+        "metadata": { "type": "object", "x-ores-json": true }
+      }
+    }
+  }
+}

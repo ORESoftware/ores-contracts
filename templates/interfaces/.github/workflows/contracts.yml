@@ -1,0 +1,40 @@
+name: contracts
+on: { pull_request: {}, push: { branches: [main, dev] } }
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - name: TypeSpec + JSON Schema parity → SQL/SeaORM/Diesel/Rust/TS/Dart
+        run: npx ores-contracts check
+      - name: generated/ is up to date (run `npx ores-contracts generate` and commit)
+        run: npx ores-contracts generate && git diff --exit-code -- generated
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: ores-contracts-receipt, path: target/ores-contracts/receipt.json }
+  rust-witness:
+    needs: parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npx ores-contracts generate
+      - run: node_modules/@oresoftware/ores-contracts/scripts/rust-witness.sh generated
+  db-witness:
+    needs: parity
+    runs-on: ubuntu-latest
+    services:
+      postgres: { image: postgres:16, env: { POSTGRES_PASSWORD: postgres }, ports: ["5432:5432"], options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - name: apply SQL_T and SQL_J to separate schemas, diff pg catalogs (db-first witness)
+        run: npx ores-contracts db-check --database-url postgresql://postgres:postgres@localhost:5432/postgres

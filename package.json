@@ -1,0 +1,12 @@
+{
+  "name": "@oresoftware/ores-contracts",
+  "version": "0.1.0",
+  "description": "Independent TypeSpec and JSON Schema authorities → parity-checked SQL, SeaORM (code-first), Diesel (db-first), Rust, TypeScript and Dart artifacts for *-interfaces, *-orm-core, *-clients and servers.",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "ores-contracts": "src/cli.mjs" },
+  "exports": { ".": "./src/cli.mjs", "./ir": "./src/ir.mjs", "./emit": "./src/emit/index.mjs" },
+  "scripts": { "test": "node --test test/*.test.mjs", "check": "node src/cli.mjs check --config test/fixtures/contracts.config.json" },
+  "peerDependencies": { "@typespec/compiler": ">=0.60" },
+  "peerDependenciesMeta": { "@typespec/compiler": { "optional": true } }
+}

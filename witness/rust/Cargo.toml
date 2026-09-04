@@ -1,0 +1,16 @@
+[package]
+name = "ores-contracts-rust-witness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Compiles the generated SeaORM (code-first) and Diesel (db-first) lanes side by side with the
+# plain serde types. `scripts/rust-witness.sh` copies the generated files in and runs cargo check.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+sea-orm = { version = "1", default-features = false, features = ["macros", "with-uuid", "with-chrono", "with-json"] }
+diesel = { version = "2", default-features = false, features = ["postgres_backend", "uuid", "chrono", "serde_json"] }
+diesel-derive-enum = { version = "2", features = ["postgres"] }
