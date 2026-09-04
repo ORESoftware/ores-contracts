@@ -1,11 +1,11 @@
 [package]
-org = "ORESoftware"
+org = "oresoftware"
 name = "ores-contracts"
 version = "0.1.0"
-kind = "library"
 language = "typescript"
 
 [package.repository]
+vcs = "git"
 url = "https://github.com/ORESoftware/ores-contracts"
 
 [dependencies]
@@ -14,9 +14,10 @@ url = "https://github.com/ORESoftware/ores-contracts"
 command = "npm test"
 
 [publish]
-include = ["src/**", "typespec/**", "lib/**", "witness/**", "scripts/**", "templates/**", "package.json", "README.md", "LICENSE", "docs/**"]
+include_readme = true
+tag_format = "v{version}"
+smoke_test = "npm --prefix \"$ZED_PKG_TEST_TARGET\" test"
+exclude = [".env", ".env.*", ".zed/**", ".zed-pack/**", "node_modules/**", "dist/**", "target/**", "**/*.log", ".DS_Store"]
 
 [scripts]
 test = "npm test"
-check = "node src/cli.mjs check"
-generate = "node src/cli.mjs generate"
