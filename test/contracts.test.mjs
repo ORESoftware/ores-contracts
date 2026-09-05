@@ -112,7 +112,7 @@ test('validators reject prototype keys and inherited required fields in both lan
 });
 
 test('database and wire enum spellings remain explicit for hyphenated values', () => {
-  for (const contract of [tsp(), js()]) {
+  for (const contract of [structuredClone(tsp()), structuredClone(js())]) {
     contract.enums.SearchPurpose = ['external-search'];
     assert.match(EMITTERS['seaorm/entities.rs'](contract, 'test'), /#\[serde\(rename = "external-search"\)\]/);
     assert.match(EMITTERS['diesel/schema.rs'](contract, 'test'), /#\[db_rename = "external-search"\]/);
