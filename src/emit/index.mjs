@@ -107,10 +107,14 @@ export function emitDiesel(c, lane) {
     for (const f of references) {
       const t = c.models.find((x) => x.name === f.references.model);
       const sameTarget = references.filter((candidate) => candidate.references.model === f.references.model);
-      if (sameTarget.length === 1) {
+      const targetsPrimaryKey = t.primaryKey.length === 1 && t.primaryKey[0] === f.references.field;
+      if (sameTarget.length === 1 && targetsPrimaryKey) {
         joins.push(`    diesel::joinable!(${m.table} -> ${t.table} (${snake(f.name)}));`);
       } else if (sameTarget[0] === f) {
-        joins.push(`    // Explicit .on(...) required: ${m.table} has ${sameTarget.length} foreign keys to ${t.table}.`);
+        const reason = sameTarget.length > 1
+          ? `${m.table} has ${sameTarget.length} foreign keys to ${t.table}`
+          : `${m.table}.${snake(f.name)} references non-primary ${t.table}.${snake(f.references.field)}`;
+        joins.push(`    // Explicit .on(...) required: ${reason}.`);
       }
     }
   }

@@ -139,3 +139,26 @@ test('multiple foreign keys to one model emit unique SeaORM relations and no con
   assert.match(diesel, /Explicit \.on\(\.\.\.\) required: invoices has 2 foreign keys to customers/);
   assert.doesNotMatch(diesel, /joinable!\(invoices -> customers/);
 });
+
+test('non-primary foreign keys require an explicit Diesel join condition', () => {
+  const contract = structuredClone(tsp());
+  const customer = contract.models.find((model) => model.name === 'Customer');
+  const id = customer.fields.find((field) => field.name === 'id');
+  const email = customer.fields.find((field) => field.name === 'email');
+  contract.models.push({
+    name: 'CustomerAlias',
+    table: 'customer_aliases',
+    primaryKey: ['id'],
+    unique: [],
+    indexes: [],
+    fields: [
+      { ...id, references: null },
+      { ...email, name: 'customerEmail', references: { model: 'Customer', field: 'email' } },
+    ],
+    doc: null,
+  });
+
+  const diesel = EMITTERS['diesel/schema.rs'](contract, 'test');
+  assert.match(diesel, /Explicit \.on\(\.\.\.\) required: customer_aliases\.customer_email references non-primary customers\.email/);
+  assert.doesNotMatch(diesel, /joinable!\(customer_aliases -> customers/);
+});
