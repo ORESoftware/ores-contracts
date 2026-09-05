@@ -97,3 +97,24 @@ test('generated TypeScript validator accepts valid and rejects invalid records',
   assert.equal(bad.ok, false); assert.equal(bad.errors.length, 5);
   assert.equal(m.validate('Nope', {}).ok, false);
 });
+
+test('validators reject prototype keys and inherited required fields in both lanes', async () => {
+  for (const [lane, contract] of [['typespec', tsp()], ['json-schema', js()]]) {
+    const source = EMITTERS['typescript/validate.mjs'](contract, lane);
+    const { validate } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+    const valid = { id: '6f1e1c2a-1b2c-4d5e-8f90-1234567890ab', email: 'a@b.c', createdAt: '2026-09-04T00:00:00Z', tags: [] };
+    for (const key of ['constructor', '__proto__', 'toString']) {
+      assert.equal(validate(key, {}).ok, false);
+      assert.equal(validate('Customer', { ...valid, [key]: 'unexpected' }).ok, false);
+    }
+    assert.equal(validate('Customer', Object.create(valid)).ok, false);
+  }
+});
+
+test('database and wire enum spellings remain explicit for hyphenated values', () => {
+  for (const contract of [tsp(), js()]) {
+    contract.enums.SearchPurpose = ['external-search'];
+    assert.match(EMITTERS['seaorm/entities.rs'](contract, 'test'), /#\[serde\(rename = "external-search"\)\]/);
+    assert.match(EMITTERS['diesel/schema.rs'](contract, 'test'), /#\[db_rename = "external-search"\]/);
+  }
+});
