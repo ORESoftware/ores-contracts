@@ -124,3 +124,18 @@ test('database and wire enum spellings remain explicit for hyphenated values', (
     assert.match(EMITTERS['diesel/schema.rs'](contract, 'test'), /#\[db_rename = "external-search"\]/);
   }
 });
+
+test('multiple foreign keys to one model emit unique SeaORM relations and no conflicting Diesel joinable', () => {
+  const contract = structuredClone(tsp());
+  const invoice = contract.models.find((model) => model.name === 'Invoice');
+  const customerId = invoice.fields.find((field) => field.name === 'customerId');
+  invoice.fields.push({ ...customerId, name: 'reviewerCustomerId', nullable: true });
+
+  const seaorm = EMITTERS['seaorm/entities.rs'](contract, 'test');
+  assert.match(seaorm, /Column::CustomerId[^]*?\n        Customer,/);
+  assert.match(seaorm, /Column::ReviewerCustomerId[^]*?\n        ReviewerCustomer,/);
+
+  const diesel = EMITTERS['diesel/schema.rs'](contract, 'test');
+  assert.match(diesel, /Explicit \.on\(\.\.\.\) required: invoices has 2 foreign keys to customers/);
+  assert.doesNotMatch(diesel, /joinable!\(invoices -> customers/);
+});

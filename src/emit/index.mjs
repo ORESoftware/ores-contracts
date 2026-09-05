@@ -76,9 +76,12 @@ export function emitSeaOrm(c, lane) {
       const attr = attrs.length ? `        #[sea_orm(${attrs.join(', ')})]\n` : '';
       return `${attr}        pub ${snake(f.name)}: ${rustType(f, true)},`;
     }).join('\n');
+    const referencedModels = m.fields.filter((f) => f.references).map((f) => f.references.model);
     const relsList = m.fields.filter((f) => f.references).map((f) => {
       const t = c.models.find((x) => x.name === f.references.model);
-      return `        #[sea_orm(belongs_to = "super::${snake(t.name)}::Entity", from = "Column::${pascal(f.name)}", to = "super::${snake(t.name)}::Column::${pascal(f.references.field)}")]\n        ${t.name},`;
+      const duplicateTarget = referencedModels.filter((name) => name === f.references.model).length > 1;
+      const relation = duplicateTarget ? pascal(f.name.replace(/Id$/, '')) : t.name;
+      return `        #[sea_orm(belongs_to = "super::${snake(t.name)}::Entity", from = "Column::${pascal(f.name)}", to = "super::${snake(t.name)}::Column::${pascal(f.references.field)}")]\n        ${relation},`;
     }).join('\n');
     const rels = relsList ? `\n${relsList}\n    ` : '';
     return `pub mod ${snake(m.name)} {\n    use sea_orm::entity::prelude::*;\n    use super::*;\n\n    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]\n    #[sea_orm(table_name = "${m.table}")]\n    pub struct Model {\n${fields}\n    }\n\n    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]\n    pub enum Relation {${rels}}\n\n    impl ActiveModelBehavior for ActiveModel {}\n}`;
@@ -99,9 +102,17 @@ export function emitDiesel(c, lane) {
     return `    table! {\n        use diesel::sql_types::*;\n        use crate::sql_types::*;\n        ${m.table} (${m.primaryKey.map(snake).join(', ')}) {\n${cols}\n        }\n    }`;
   }).join('\n\n');
   const joins = [];
-  for (const m of c.models) for (const f of m.fields) if (f.references) {
-    const t = c.models.find((x) => x.name === f.references.model);
-    joins.push(`    diesel::joinable!(${m.table} -> ${t.table} (${snake(f.name)}));`);
+  for (const m of c.models) {
+    const references = m.fields.filter((f) => f.references);
+    for (const f of references) {
+      const t = c.models.find((x) => x.name === f.references.model);
+      const sameTarget = references.filter((candidate) => candidate.references.model === f.references.model);
+      if (sameTarget.length === 1) {
+        joins.push(`    diesel::joinable!(${m.table} -> ${t.table} (${snake(f.name)}));`);
+      } else if (sameTarget[0] === f) {
+        joins.push(`    // Explicit .on(...) required: ${m.table} has ${sameTarget.length} foreign keys to ${t.table}.`);
+      }
+    }
   }
   const allow = c.models.length > 1 ? `    diesel::allow_tables_to_appear_in_same_query!(${c.models.map((m) => m.table).join(', ')});` : '';
   const structs = c.models.map((m) => {
