@@ -84,7 +84,7 @@ test('bootstrap command refuses to overwrite without --force', () => {
   assert.throws(() => bootstrap(cfg, 'json-schema', quiet), /--force/);
   bootstrap(cfg, 'json-schema', { ...quiet, force: true });
   assert.equal(canonical(parseTypeSpec(readFileSync(cfg.typespec, 'utf8'))), canonical(js()));
-  assert.ok(existsSync(join(d, 'typespec/ores.tsp')));
+  assert.ok(existsSync(join(d, 'typespec/ores.tsp')) && existsSync(join(d, 'typespec/ores-decorators.js')));
 });
 
 test('generated TypeScript validator accepts valid and rejects invalid records', async () => {

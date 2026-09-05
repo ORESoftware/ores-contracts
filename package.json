@@ -1,6 +1,6 @@
 {
   "name": "@oresoftware/ores-contracts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Independent TypeSpec and JSON Schema authorities → parity-checked SQL, SeaORM (code-first), Diesel (db-first), Rust, TypeScript and Dart artifacts for *-interfaces, *-orm-core, *-clients and servers.",
   "type": "module",
   "license": "MIT",
