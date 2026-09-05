@@ -98,6 +98,12 @@ test('generated TypeScript validator accepts valid and rejects invalid records',
   assert.equal(m.validate('Nope', {}).ok, false);
 });
 
+test('generated TypeScript declarations use legal ambient const declarations', () => {
+  const source = EMITTERS['typescript/types.d.ts'](tsp(), 'typespec');
+  assert.match(source, /export declare const InvoiceStatusValues: readonly InvoiceStatus\[\];/);
+  assert.doesNotMatch(source, /export declare const \w+Values[^;]*=/);
+});
+
 test('validators reject prototype keys and inherited required fields in both lanes', async () => {
   for (const [lane, contract] of [['typespec', tsp()], ['json-schema', js()]]) {
     const source = EMITTERS['typescript/validate.mjs'](contract, lane);

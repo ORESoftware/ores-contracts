@@ -119,7 +119,7 @@ function tsType(f) {
   return t;
 }
 export function emitTsTypes(c, lane) {
-  const enums = Object.entries(c.enums).map(([n, v]) => `export type ${n} = ${v.map((x) => JSON.stringify(x)).join(' | ')};\nexport const ${n}Values: readonly ${n}[] = [${v.map((x) => JSON.stringify(x)).join(', ')}] as const;`).join('\n');
+  const enums = Object.entries(c.enums).map(([n, v]) => `export type ${n} = ${v.map((x) => JSON.stringify(x)).join(' | ')};\nexport declare const ${n}Values: readonly ${n}[];`).join('\n');
   const models = c.models.map((m) => `export interface ${m.name} {\n${m.fields.map((f) => `  ${f.name}${f.nullable ? '?' : ''}: ${tsType(f)};`).join('\n')}\n}`).join('\n\n');
   return `${HEADER(lane)}\n// namespace ${c.namespace}\n${enums}\n\n${models}\n\nexport declare function validate<K extends keyof Models>(model: K, value: unknown): { ok: true; value: Models[K] } | { ok: false; errors: string[] };\nexport interface Models {\n${c.models.map((m) => `  ${m.name}: ${m.name};`).join('\n')}\n}\n`;
 }
