@@ -46,9 +46,9 @@ function rustType(f, forSeaOrm = false) {
   if (f.nullable) t = `Option<${t}>`;
   return t;
 }
-function rustEnums(c, derive) {
+function rustEnums(c, derive, database = false) {
   return Object.entries(c.enums).map(([name, values]) => {
-    const variants = values.map((v) => `    #[serde(rename = "${v}")]\n    ${pascal(v)},`).join('\n');
+    const variants = values.map((v) => `    #[serde(rename = "${v}")]\n${database ? `    #[db_rename = "${v}"]\n` : ""}    ${pascal(v)},`).join('\n');
     return `#[derive(${derive})]\npub enum ${name} {\n${variants}\n}`;
   }).join('\n\n');
 }
@@ -64,7 +64,7 @@ export function emitRust(c, lane) {
 // ---------- SeaORM entities (code-first lane) ----------
 export function emitSeaOrm(c, lane) {
   const enums = Object.entries(c.enums).map(([name, values]) => {
-    const variants = values.map((v) => `    #[sea_orm(string_value = "${v}")]\n    ${pascal(v)},`).join('\n');
+    const variants = values.map((v) => `    #[sea_orm(string_value = "${v}")]\n    #[serde(rename = "${v}")]\n    ${pascal(v)},`).join('\n');
     return `#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, serde::Serialize, serde::Deserialize)]\n#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "${snake(name)}")]\npub enum ${name} {\n${variants}\n}`;
   }).join('\n\n');
   const mods = c.models.map((m) => {
@@ -76,9 +76,12 @@ export function emitSeaOrm(c, lane) {
       const attr = attrs.length ? `        #[sea_orm(${attrs.join(', ')})]\n` : '';
       return `${attr}        pub ${snake(f.name)}: ${rustType(f, true)},`;
     }).join('\n');
+    const referencedModels = m.fields.filter((f) => f.references).map((f) => f.references.model);
     const relsList = m.fields.filter((f) => f.references).map((f) => {
       const t = c.models.find((x) => x.name === f.references.model);
-      return `        #[sea_orm(belongs_to = "super::${snake(t.name)}::Entity", from = "Column::${pascal(f.name)}", to = "super::${snake(t.name)}::Column::${pascal(f.references.field)}")]\n        ${t.name},`;
+      const duplicateTarget = referencedModels.filter((name) => name === f.references.model).length > 1;
+      const relation = duplicateTarget ? pascal(f.name.replace(/Id$/, '')) : t.name;
+      return `        #[sea_orm(belongs_to = "super::${snake(t.name)}::Entity", from = "Column::${pascal(f.name)}", to = "super::${snake(t.name)}::Column::${pascal(f.references.field)}")]\n        ${relation},`;
     }).join('\n');
     const rels = relsList ? `\n${relsList}\n    ` : '';
     return `pub mod ${snake(m.name)} {\n    use sea_orm::entity::prelude::*;\n    use super::*;\n\n    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, serde::Serialize, serde::Deserialize)]\n    #[sea_orm(table_name = "${m.table}")]\n    pub struct Model {\n${fields}\n    }\n\n    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]\n    pub enum Relation {${rels}}\n\n    impl ActiveModelBehavior for ActiveModel {}\n}`;
@@ -99,16 +102,28 @@ export function emitDiesel(c, lane) {
     return `    table! {\n        use diesel::sql_types::*;\n        use crate::sql_types::*;\n        ${m.table} (${m.primaryKey.map(snake).join(', ')}) {\n${cols}\n        }\n    }`;
   }).join('\n\n');
   const joins = [];
-  for (const m of c.models) for (const f of m.fields) if (f.references) {
-    const t = c.models.find((x) => x.name === f.references.model);
-    joins.push(`    diesel::joinable!(${m.table} -> ${t.table} (${snake(f.name)}));`);
+  for (const m of c.models) {
+    const references = m.fields.filter((f) => f.references);
+    for (const f of references) {
+      const t = c.models.find((x) => x.name === f.references.model);
+      const sameTarget = references.filter((candidate) => candidate.references.model === f.references.model);
+      const targetsPrimaryKey = t.primaryKey.length === 1 && t.primaryKey[0] === f.references.field;
+      if (sameTarget.length === 1 && targetsPrimaryKey) {
+        joins.push(`    diesel::joinable!(${m.table} -> ${t.table} (${snake(f.name)}));`);
+      } else if (sameTarget[0] === f) {
+        const reason = sameTarget.length > 1
+          ? `${m.table} has ${sameTarget.length} foreign keys to ${t.table}`
+          : `${m.table}.${snake(f.name)} references non-primary ${t.table}.${snake(f.references.field)}`;
+        joins.push(`    // Explicit .on(...) required: ${reason}.`);
+      }
+    }
   }
   const allow = c.models.length > 1 ? `    diesel::allow_tables_to_appear_in_same_query!(${c.models.map((m) => m.table).join(', ')});` : '';
   const structs = c.models.map((m) => {
     const fields = m.fields.map((f) => `    pub ${snake(f.name)}: ${rustType(f)},`).join('\n');
     return `#[derive(Debug, Clone, PartialEq, diesel::Queryable, diesel::Selectable, diesel::Insertable, serde::Serialize, serde::Deserialize)]\n#[diesel(table_name = schema::${m.table})]\n#[diesel(check_for_backend(diesel::pg::Pg))]\npub struct ${m.name} {\n${fields}\n}`;
   }).join('\n\n');
-  return `${HEADER(lane, 'diesel')}\n// namespace ${c.namespace}\n#![allow(dead_code, unused_imports)]\n\npub mod sql_types {\n${sqlTypes}\n}\n\npub mod schema {\n${tables}\n\n${joins.join('\n')}\n${allow}\n}\n\n${rustEnums(c, 'Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, diesel_derive_enum::DbEnum').replace(/#\[derive\(([^)]*)\)\]\npub enum (\w+)/g, (s, d, n) => `#[derive(${d})]\n#[ExistingTypePath = "crate::sql_types::${pascal(n)}"]\npub enum ${n}`)}\n\n${structs}\n`;
+  return `${HEADER(lane, 'diesel')}\n// namespace ${c.namespace}\n#![allow(dead_code, unused_imports)]\n\npub mod sql_types {\n${sqlTypes}\n}\n\npub mod schema {\n${tables}\n\n${joins.join('\n')}\n${allow}\n}\n\n${rustEnums(c, 'Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, diesel_derive_enum::DbEnum', true).replace(/#\[derive\(([^)]*)\)\]\npub enum (\w+)/g, (s, d, n) => `#[derive(${d})]\n#[ExistingTypePath = "crate::sql_types::${pascal(n)}"]\npub enum ${n}`)}\n\n${structs}\n`;
 }
 
 // ---------- TypeScript types + validator ----------
@@ -119,7 +134,7 @@ function tsType(f) {
   return t;
 }
 export function emitTsTypes(c, lane) {
-  const enums = Object.entries(c.enums).map(([n, v]) => `export type ${n} = ${v.map((x) => JSON.stringify(x)).join(' | ')};\nexport const ${n}Values: readonly ${n}[] = [${v.map((x) => JSON.stringify(x)).join(', ')}] as const;`).join('\n');
+  const enums = Object.entries(c.enums).map(([n, v]) => `export type ${n} = ${v.map((x) => JSON.stringify(x)).join(' | ')};\nexport declare const ${n}Values: readonly ${n}[];`).join('\n');
   const models = c.models.map((m) => `export interface ${m.name} {\n${m.fields.map((f) => `  ${f.name}${f.nullable ? '?' : ''}: ${tsType(f)};`).join('\n')}\n}`).join('\n\n');
   return `${HEADER(lane)}\n// namespace ${c.namespace}\n${enums}\n\n${models}\n\nexport declare function validate<K extends keyof Models>(model: K, value: unknown): { ok: true; value: Models[K] } | { ok: false; errors: string[] };\nexport interface Models {\n${c.models.map((m) => `  ${m.name}: ${m.name};`).join('\n')}\n}\n`;
 }
@@ -127,7 +142,7 @@ export function emitTsValidator(c, lane) {
   const scalarCheck = { string: 'typeof v === "string"', uuid: 'typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)', int32: 'Number.isInteger(v) && v >= -2147483648 && v <= 2147483647', int64: 'Number.isInteger(v)', float64: 'typeof v === "number" && Number.isFinite(v)', boolean: 'typeof v === "boolean"', utcDateTime: 'typeof v === "string" && !Number.isNaN(Date.parse(v))', plainDate: 'typeof v === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(v)', bytes: 'typeof v === "string"', json: 'v !== undefined' };
   const enums = Object.entries(c.enums).map(([n, v]) => `export const ${n}Values = Object.freeze(${JSON.stringify(v)});`).join('\n');
   const specs = c.models.map((m) => `  ${m.name}: { fields: {\n${m.fields.map((f) => `    ${f.name}: { nullable: ${f.nullable}, array: ${f.array}, check: (v) => ${f.enumName ? `${f.enumName}Values.includes(v)` : scalarCheck[f.type]}${f.maxLength && f.type === 'string' ? ` && v.length <= ${f.maxLength}` : ''} },`).join('\n')}\n  } },`).join('\n');
-  return `${HEADER(lane)}\n// namespace ${c.namespace}\n${enums}\n\nconst MODELS = {\n${specs}\n};\n\nexport function validate(model, value) {\n  const spec = MODELS[model];\n  if (!spec) return { ok: false, errors: [\`unknown model \${model}\`] };\n  const errors = [];\n  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, errors: ['expected an object'] };\n  for (const key of Object.keys(value)) if (!(key in spec.fields)) errors.push(\`unexpected field \${key}\`);\n  for (const [name, f] of Object.entries(spec.fields)) {\n    const v = value[name];\n    if (v === undefined || v === null) { if (!f.nullable) errors.push(\`missing required field \${name}\`); continue; }\n    if (f.array) { if (!Array.isArray(v)) { errors.push(\`\${name} must be an array\`); continue; } v.forEach((item, i) => { if (!f.check(item)) errors.push(\`\${name}[\${i}] is invalid\`); }); }\n    else if (!f.check(v)) errors.push(\`\${name} is invalid\`);\n  }\n  return errors.length ? { ok: false, errors } : { ok: true, value };\n}\n\nexport const models = Object.freeze(Object.keys(MODELS));\n`;
+  return `${HEADER(lane)}\n// namespace ${c.namespace}\n${enums}\n\nconst MODELS = {\n${specs}\n};\n\nexport function validate(model, value) {\n  const spec = Object.hasOwn(MODELS, model) ? MODELS[model] : undefined;\n  if (!spec) return { ok: false, errors: [\`unknown model \${model}\`] };\n  const errors = [];\n  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, errors: ['expected an object'] };\n  for (const key of Object.keys(value)) if (!Object.hasOwn(spec.fields, key)) errors.push(\`unexpected field \${key}\`);\n  for (const [name, f] of Object.entries(spec.fields)) {\n    const v = Object.hasOwn(value, name) ? value[name] : undefined;\n    if (v === undefined || v === null) { if (!f.nullable) errors.push(\`missing required field \${name}\`); continue; }\n    if (f.array) { if (!Array.isArray(v)) { errors.push(\`\${name} must be an array\`); continue; } v.forEach((item, i) => { if (!f.check(item)) errors.push(\`\${name}[\${i}] is invalid\`); }); }\n    else if (!f.check(v)) errors.push(\`\${name} is invalid\`);\n  }\n  return errors.length ? { ok: false, errors } : { ok: true, value };\n}\n\nexport const models = Object.freeze(Object.keys(MODELS));\n`;
 }
 
 // ---------- Dart ----------
