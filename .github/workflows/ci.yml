@@ -31,18 +31,19 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.16.0
-      - name: Test deterministic contract pipeline
+      - name: Test persistence-aware contract pipeline
         run: npm test
-      - name: Generate parity witnesses
+      - name: Generate persistence parity witnesses
         run: node src/cli.mjs generate --config test/fixtures/contracts.config.json
-      - name: Enforce independent peer authorities with TJSV
+      - name: Enforce independent wire canary with TJSV
         uses: ORESoftware/typespec-json-schema-validator@5489c98537cade78d8c558c668ef555999b8ef5c
         with:
-          typespec: test/fixtures/typespec/main.tsp
-          schema: test/fixtures/json-schema/contract.schema.json
+          typespec: test/tjsv-canary/main.tsp
+          schema: test/tjsv-canary/schema.json
           report: ${{ runner.temp }}/ores-contracts-tjsv.json
           sarif: ''
           quiet: 'false'
+          seal_object_schemas: 'true'
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
