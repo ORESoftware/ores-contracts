@@ -89,10 +89,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          out="$RUNNER_TEMP/ores-contracts-0.1.1.zpkg"
-          .tools/zed-cli/target/release/zed pack --out "$out"
-          test -s "$out"
-          sha256sum "$out" > "$RUNNER_TEMP/ores-contracts-0.1.1.zpkg.sha256"
+          out_dir="$RUNNER_TEMP/ores-contracts-0.1.1.zpkg"
+          archive="$out_dir/oresoftware-ores-contracts-0.1.1.tar.gz"
+          .tools/zed-cli/target/release/zed pack --out "$out_dir"
+          test -s "$archive"
+          sha256sum "$archive" > "$RUNNER_TEMP/ores-contracts-0.1.1.zpkg.sha256"
       - name: Run package smoke contract
         run: npm test
       - name: Prove preflight is read-only
