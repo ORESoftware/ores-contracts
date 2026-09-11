@@ -4,3 +4,7 @@ witness/rust/src/generated/
 witness/rust/Cargo.lock
 test/fixtures/target/
 test/fixtures/generated/
+.ores/
+tmp/
+temp/
+.typespec-json-schema-validator/

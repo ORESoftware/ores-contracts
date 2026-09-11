@@ -2,6 +2,7 @@
 // The decorators are declared with `extern` and implemented by ./ores-decorators.js (copied beside main.tsp)
 // so `tsp compile` accepts them; ores-contracts' own parser reads them structurally.
 import "./ores-decorators.js";
+using TypeSpec.Reflection;
 
 namespace Ores;
 

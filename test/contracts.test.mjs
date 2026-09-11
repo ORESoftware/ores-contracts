@@ -97,3 +97,68 @@ test('generated TypeScript validator accepts valid and rejects invalid records',
   assert.equal(bad.ok, false); assert.equal(bad.errors.length, 5);
   assert.equal(m.validate('Nope', {}).ok, false);
 });
+
+test('generated TypeScript declarations use legal ambient const declarations', () => {
+  const source = EMITTERS['typescript/types.d.ts'](tsp(), 'typespec');
+  assert.match(source, /export declare const InvoiceStatusValues: readonly InvoiceStatus\[\];/);
+  assert.doesNotMatch(source, /export declare const \w+Values[^;]*=/);
+});
+
+test('validators reject prototype keys and inherited required fields in both lanes', async () => {
+  for (const [lane, contract] of [['typespec', tsp()], ['json-schema', js()]]) {
+    const source = EMITTERS['typescript/validate.mjs'](contract, lane);
+    const { validate } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+    const valid = { id: '6f1e1c2a-1b2c-4d5e-8f90-1234567890ab', email: 'a@b.c', createdAt: '2026-09-04T00:00:00Z', tags: [] };
+    for (const key of ['constructor', '__proto__', 'toString']) {
+      assert.equal(validate(key, {}).ok, false);
+      assert.equal(validate('Customer', { ...valid, [key]: 'unexpected' }).ok, false);
+    }
+    assert.equal(validate('Customer', Object.create(valid)).ok, false);
+  }
+});
+
+test('database and wire enum spellings remain explicit for hyphenated values', () => {
+  for (const contract of [structuredClone(tsp()), structuredClone(js())]) {
+    contract.enums.SearchPurpose = ['external-search'];
+    assert.match(EMITTERS['seaorm/entities.rs'](contract, 'test'), /#\[serde\(rename = "external-search"\)\]/);
+    assert.match(EMITTERS['diesel/schema.rs'](contract, 'test'), /#\[db_rename = "external-search"\]/);
+  }
+});
+
+test('multiple foreign keys to one model emit unique SeaORM relations and no conflicting Diesel joinable', () => {
+  const contract = structuredClone(tsp());
+  const invoice = contract.models.find((model) => model.name === 'Invoice');
+  const customerId = invoice.fields.find((field) => field.name === 'customerId');
+  invoice.fields.push({ ...customerId, name: 'reviewerCustomerId', nullable: true });
+
+  const seaorm = EMITTERS['seaorm/entities.rs'](contract, 'test');
+  assert.match(seaorm, /Column::CustomerId[^]*?\n        Customer,/);
+  assert.match(seaorm, /Column::ReviewerCustomerId[^]*?\n        ReviewerCustomer,/);
+
+  const diesel = EMITTERS['diesel/schema.rs'](contract, 'test');
+  assert.match(diesel, /Explicit \.on\(\.\.\.\) required: invoices has 2 foreign keys to customers/);
+  assert.doesNotMatch(diesel, /joinable!\(invoices -> customers/);
+});
+
+test('non-primary foreign keys require an explicit Diesel join condition', () => {
+  const contract = structuredClone(tsp());
+  const customer = contract.models.find((model) => model.name === 'Customer');
+  const id = customer.fields.find((field) => field.name === 'id');
+  const email = customer.fields.find((field) => field.name === 'email');
+  contract.models.push({
+    name: 'CustomerAlias',
+    table: 'customer_aliases',
+    primaryKey: ['id'],
+    unique: [],
+    indexes: [],
+    fields: [
+      { ...id, references: null },
+      { ...email, name: 'customerEmail', references: { model: 'Customer', field: 'email' } },
+    ],
+    doc: null,
+  });
+
+  const diesel = EMITTERS['diesel/schema.rs'](contract, 'test');
+  assert.match(diesel, /Explicit \.on\(\.\.\.\) required: customer_aliases\.customer_email references non-primary customers\.email/);
+  assert.doesNotMatch(diesel, /joinable!\(customer_aliases -> customers/);
+});
