@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ContractCanary": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": ["id", "tags"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "note": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
