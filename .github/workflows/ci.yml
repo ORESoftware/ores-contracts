@@ -1,27 +1,97 @@
 name: ci
-on: { push: { branches: [main, dev] }, pull_request: {} }
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ores-contracts-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - run: npm test
-      - run: node src/cli.mjs generate --config test/fixtures/contracts.config.json
-      - uses: dtolnay/rust-toolchain@stable
-      - run: scripts/rust-witness.sh test/fixtures/generated
+      - name: Check out exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+      - name: Test deterministic contract pipeline
+        run: npm test
+      - name: Generate parity witnesses
+        run: node src/cli.mjs generate --config test/fixtures/contracts.config.json
+      - name: Enforce independent peer authorities with TJSV
+        uses: ORESoftware/typespec-json-schema-validator@5489c98537cade78d8c558c668ef555999b8ef5c
+        with:
+          typespec: test/fixtures/typespec/main.tsp
+          schema: test/fixtures/json-schema/contract.schema.json
+          report: ${{ runner.temp }}/ores-contracts-tjsv.json
+          sarif: ''
+          quiet: 'false'
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.98.1
+      - name: Compile Rust / SeaORM / Diesel witnesses
+        run: scripts/rust-witness.sh test/fixtures/generated
+      - name: Prove tracked sources are unchanged
+        run: git diff --exit-code
+      - name: Retain TJSV admission receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ores-contracts-tjsv
+          path: ${{ runner.temp }}/ores-contracts-tjsv.json
+          if-no-files-found: warn
+          retention-days: 14
+
   db-witness:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       postgres:
-        image: postgres:16
-        env: { POSTGRES_PASSWORD: postgres }
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        image: postgres:16.15-bookworm
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - run: sudo apt-get install -y -q postgresql-client >/dev/null
-      - run: node src/cli.mjs db-check --config test/fixtures/contracts.config.json --database-url postgresql://postgres:postgres@localhost:5432/postgres
+      - name: Check out exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y -q postgresql-client >/dev/null
+      - name: Compare both SQL lanes against PostgreSQL 16.15
+        run: node src/cli.mjs db-check --config test/fixtures/contracts.config.json --database-url postgresql://postgres:postgres@localhost:5432/postgres
+      - name: Prove tracked sources are unchanged
+        run: git diff --exit-code
