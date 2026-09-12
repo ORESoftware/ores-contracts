@@ -1,7 +1,7 @@
 // ores-contracts persistence decorators. `import "./ores.tsp"; using Ores;` in main.tsp.
-// The decorators are declared with `extern` and implemented by ../lib/ores-decorators.js
+// The decorators are declared with `extern` and implemented by ./ores-decorators.js (copied beside main.tsp)
 // so `tsp compile` accepts them; ores-contracts' own parser reads them structurally.
-import "../lib/ores-decorators.js";
+import "./ores-decorators.js";
 
 namespace Ores;
 

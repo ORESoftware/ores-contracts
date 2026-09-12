@@ -64,7 +64,7 @@ function writeTree(base, files) {
 export function check(cfg, { log = console.log } = {}) {
   const lanes = readAuthorities(cfg);
   const names = Object.keys(lanes);
-  const receipt = { tool: 'ores-contracts', version: '0.1.0', checkedAt: new Date().toISOString(), authorities: {}, findings: [], artifacts: {}, status: 'passed' };
+  const receipt = { tool: 'ores-contracts', version: '0.1.1', checkedAt: new Date().toISOString(), authorities: {}, findings: [], artifacts: {}, status: 'passed' };
   if (names.length < 2) {
     receipt.status = 'stopped_for_evaluation';
     receipt.findings.push({ kind: 'missing-authority', detail: `need both authorities; found ${names.join(', ') || 'none'} (run bootstrap)` });
@@ -134,7 +134,7 @@ export function bootstrap(cfg, from, { force = false, log = console.log } = {}) 
     if (existsSync(cfg.typespec) && !force) throw new ContractError(`${cfg.typespec} exists; pass --force to overwrite`, 'bootstrap');
     mkdirSync(dirname(cfg.typespec), { recursive: true });
     writeFileSync(cfg.typespec, renderTypeSpec(lanes['json-schema'].contract, note));
-    writeFileSync(join(dirname(cfg.typespec), 'ores.tsp'), readFileSync(new URL('../typespec/ores.tsp', import.meta.url), 'utf8'));
+    for (const f of ['ores.tsp', 'ores-decorators.js']) writeFileSync(join(dirname(cfg.typespec), f), readFileSync(new URL(`../typespec/${f}`, import.meta.url), 'utf8'));
     log(`[contracts] wrote draft ${cfg.typespec} (+ ores.tsp decorators)`);
   } else if (from === 'typespec') {
     if (!lanes.typespec) throw new ContractError('no TypeSpec authority to bootstrap from', cfg.typespec);

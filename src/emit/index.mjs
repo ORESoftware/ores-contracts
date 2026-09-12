@@ -99,7 +99,7 @@ export function emitDiesel(c, lane) {
       if (f.nullable) t = `Nullable<${t}>`;
       return `            ${snake(f.name)} -> ${t},`;
     }).join('\n');
-    return `    table! {\n        use diesel::sql_types::*;\n        use crate::sql_types::*;\n        ${m.table} (${m.primaryKey.map(snake).join(', ')}) {\n${cols}\n        }\n    }`;
+    return `    diesel::table! {\n        use diesel::sql_types::*;\n        use crate::sql_types::*;\n        ${m.table} (${m.primaryKey.map(snake).join(', ')}) {\n${cols}\n        }\n    }`;
   }).join('\n\n');
   const joins = [];
   for (const m of c.models) {
