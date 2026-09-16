@@ -96,6 +96,7 @@ jobs:
           node .ores-tools/tjsv/bin/typespec-json-schema-validator.mjs check \
             --typespec=test/fixtures/typespec/main.tsp \
             --schema=test/fixtures/json-schema/contract.schema.json \
+            --mapping=test/fixtures/tjsv.mapping.json \
             --output-dir="$RUNNER_TEMP/tjsv-generated" \
             --report="$RUNNER_TEMP/tjsv-report.json" \
             --contract-ir="$RUNNER_TEMP/contract-ir.json" \
