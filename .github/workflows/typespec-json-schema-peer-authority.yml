@@ -41,7 +41,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Generate Schema B and compare both peer authorities
-        uses: ORESoftware/typespec-json-schema-validator@dd3418aa243198619abfd6106cea3540ef0bbb4f
+        uses: ORESoftware/typespec-json-schema-validator@a433a3e6c79a95986320d1d875a066b7e30d9420
         with:
           typespec: test/fixtures/schema-authority-canary/main.tsp
           schema: test/fixtures/schema-authority-canary/authored.schema.json
@@ -52,7 +52,7 @@ jobs:
 
       # This canary verifies gate admission, not unrelated product contracts.
       - name: Require current evidence and the canonical consumer-admission refusals
-        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@dd3418aa243198619abfd6106cea3540ef0bbb4f
+        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@a433a3e6c79a95986320d1d875a066b7e30d9420
         with:
           contract_ir: .typespec-json-schema-validator/contract-ir.json
           report: .typespec-json-schema-validator/report.json
