@@ -1,7 +1,7 @@
 // TypeSpec authority parser (supported subset — see docs/subset.md). Regex-based on
-// purpose: it accepts exactly what the fleet contract allows and fails closed on
-// anything else, so the *real* `tsp compile` (run separately) and this parser
-// can never disagree silently about what a construct means.
+// purpose: it accepts exactly what the fleet persistence contract allows and fails
+// closed on anything else. Generic wire/schema equivalence belongs to TJSV; this
+// parser extracts only the bounded persistence projection plus ORES annotations.
 import { field, model, finalize, ContractError, SCALARS } from './ir.mjs';
 
 const DECORATOR_RE = /@([A-Za-z_][A-Za-z0-9_.]*)(?:\(([^)]*)\))?/g;
@@ -26,6 +26,16 @@ function csv(s) { return String(s).split(',').map((x) => x.trim()).filter(Boolea
 
 function recordValueType(typeExpr) {
   return /^Record<\s*([A-Za-z_][A-Za-z0-9_.]*)\s*>$/.exec(typeExpr)?.[1] ?? null;
+}
+
+function persistenceScalar(typeExpr, decorators, where) {
+  const format = decorators.find((d) => d.name === 'format' || d.name === 'TypeSpec.format')?.args[0] ?? null;
+  if (format !== null) {
+    if (typeExpr !== 'string') throw new ContractError('@format persistence projection is only supported on string fields', where);
+    if (format !== 'uuid') throw new ContractError(`unsupported persistence string format ${format}`, where);
+    return 'uuid';
+  }
+  return typeExpr;
 }
 
 export function parseTypeSpec(source, where = 'main.tsp') {
@@ -66,16 +76,23 @@ export function parseTypeSpec(source, where = 'main.tsp') {
       const fd = decoratorsOf(prefix);
       const recordValue = recordValueType(typeExpr);
       const isEnum = !recordValue && !!enums[typeExpr];
+      let persistenceType = null;
       if (recordValue) {
         const recordValueIsEnum = !!enums[recordValue];
-        if (!recordValueIsEnum && !SCALARS[recordValue]) {
+        if (recordValue !== 'unknown' && !recordValueIsEnum && !SCALARS[recordValue]) {
           throw new ContractError(`unsupported Record value type ${recordValue}`, `${where}:${name}.${fname}`);
         }
         if (arr) {
           throw new ContractError('arrays of Record<T> are outside the supported subset', `${where}:${name}.${fname}`);
         }
-      } else if (!isEnum && !SCALARS[typeExpr]) {
-        throw new ContractError(`unsupported type ${typeExpr}`, `${where}:${name}.${fname}`);
+        persistenceType = 'json';
+      } else if (isEnum) {
+        persistenceType = 'enum';
+      } else {
+        persistenceType = persistenceScalar(typeExpr, fd, `${where}:${name}.${fname}`);
+        if (!SCALARS[persistenceType]) {
+          throw new ContractError(`unsupported type ${typeExpr}`, `${where}:${name}.${fname}`);
+        }
       }
       if (fd.some((d) => d.name === 'key')) primaryKey.push(fname);
       const ref = fd.find((d) => d.name === 'Ores.references' || d.name === 'references');
@@ -86,7 +103,7 @@ export function parseTypeSpec(source, where = 'main.tsp') {
       const fdoc = fd.find((d) => d.name === 'doc')?.args[0] ?? null;
       fields.push(field({
         name: fname,
-        type: recordValue ? 'json' : isEnum ? 'enum' : typeExpr,
+        type: persistenceType,
         nullable: !!opt,
         array: !!arr,
         enumName: isEnum ? typeExpr : null,
