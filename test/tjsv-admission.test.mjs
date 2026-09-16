@@ -30,7 +30,7 @@ function scratchWithTjsv(extra = {}) {
   return root;
 }
 
-function passedVerification() {
+function passedVerification(extra = {}) {
   return {
     schema: 'ores.typespec-json-schema-validator.contract-ir-verification/v1',
     status: 'passed',
@@ -40,6 +40,9 @@ function passedVerification() {
     expectedIrId: hex('a'),
     receiptRunId: hex('b'),
     declarationIds: ['Demo.Customer', 'Demo.Invoice'],
+    excludedDeclarationIds: [],
+    outOfScopeDeclarationIds: [],
+    ...extra,
   };
 }
 
@@ -67,10 +70,40 @@ test('canonical verifier binds exact current source lanes before persistence par
   assert.equal(receipt.tjsv.contractIrId, hex('a'));
   assert.equal(receipt.tjsv.parityRunId, hex('b'));
   assert.deepEqual(receipt.tjsv.declarationIds, ['Demo.Customer', 'Demo.Invoice']);
+  assert.deepEqual(receipt.tjsv.excludedDeclarationIds, []);
+  assert.deepEqual(receipt.tjsv.outOfScopeDeclarationIds, []);
   assert.equal(seen.typespec, cfg.typespec);
   assert.equal(seen.generatedSchema, cfg.tjsv.generatedSchema);
   assert.equal(seen.authoredSchema, cfg.jsonSchema);
   assert.deepEqual(seen.expectedDeclarations, ['Demo.Customer', 'Demo.Invoice']);
+  assert.deepEqual(seen.expectedExcludedDeclarations, []);
+  assert.deepEqual(seen.expectedOutOfScopeDeclarations, []);
+});
+
+test('reviewed compiler helpers and decorator declarations are bound into the persistence receipt', async () => {
+  const excluded = ['typespec-generated-json-schema:RecordUnknown'];
+  const outOfScope = ['typespec:$decorators', 'typespec:Ores.table'];
+  const root = scratchWithTjsv({
+    expectedExcludedDeclarations: excluded,
+    expectedOutOfScopeDeclarations: outOfScope,
+  });
+  const cfg = loadConfig(join(root, 'contracts.config.json'));
+  let seen;
+  const receipt = await checkAdmitted(cfg, {
+    ...quiet,
+    tjsvVerifier: async (input) => {
+      seen = input;
+      return passedVerification({
+        excludedDeclarationIds: excluded,
+        outOfScopeDeclarationIds: outOfScope,
+      });
+    },
+  });
+  assert.equal(receipt.status, 'passed');
+  assert.deepEqual(seen.expectedExcludedDeclarations, excluded);
+  assert.deepEqual(seen.expectedOutOfScopeDeclarations, outOfScope);
+  assert.deepEqual(receipt.tjsv.excludedDeclarationIds, excluded);
+  assert.deepEqual(receipt.tjsv.outOfScopeDeclarationIds, outOfScope);
 });
 
 test('canonical verifier failure stops before persistence promotion', async () => {
@@ -98,6 +131,22 @@ test('verification identities and declaration scope must agree exactly', async (
       tjsvVerifier: async () => ({ ...passedVerification(), declarationIds: ['Demo.Customer'] }),
     }),
     /scope differs/,
+  );
+});
+
+test('reviewed scope exclusions cannot drift after verification', async () => {
+  const root = scratchWithTjsv({
+    expectedExcludedDeclarations: ['typespec-generated-json-schema:RecordUnknown'],
+  });
+  const cfg = loadConfig(join(root, 'contracts.config.json'));
+  await assert.rejects(
+    () => checkAdmitted(cfg, {
+      ...quiet,
+      tjsvVerifier: async () => passedVerification({
+        excludedDeclarationIds: ['typespec-generated-json-schema:DifferentHelper'],
+      }),
+    }),
+    /excluded declaration scope differs/,
   );
 });
 
