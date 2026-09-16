@@ -143,7 +143,7 @@ jobs:
             }
           }, null, 2));
           NODE
-          node src/cli.mjs check --config="$ADMITTED_CONFIG"
+          node src/cli.mjs check --config "$ADMITTED_CONFIG"
       - name: Prove tracked sources are unchanged
         run: git diff --exit-code
       - name: Retain cross-repo admission evidence
