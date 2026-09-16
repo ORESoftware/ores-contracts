@@ -18,8 +18,8 @@ function readJson(path, label) {
   return value;
 }
 
-function exactIdentities(values, label) {
-  requireCondition(Array.isArray(values) && values.length > 0, `${label} must be a nonempty array`);
+function exactIdentities(values, label, { allowEmpty = false } = {}) {
+  requireCondition(Array.isArray(values) && (allowEmpty || values.length > 0), `${label} must be ${allowEmpty ? 'an array' : 'a nonempty array'}`);
   const result = [];
   for (let index = 0; index < values.length; index++) {
     requireCondition(Object.hasOwn(values, index), `${label} contains a missing own element`);
@@ -29,6 +29,14 @@ function exactIdentities(values, label) {
   }
   requireCondition(new Set(result).size === result.length, `${label} contains duplicate identities`);
   return result.sort();
+}
+
+function exactReviewedScope(cfg) {
+  return {
+    declarations: exactIdentities(cfg.tjsv.expectedDeclarations, 'tjsv.expectedDeclarations'),
+    excluded: exactIdentities(cfg.tjsv.expectedExcludedDeclarations ?? [], 'tjsv.expectedExcludedDeclarations', { allowEmpty: true }),
+    outOfScope: exactIdentities(cfg.tjsv.expectedOutOfScopeDeclarations ?? [], 'tjsv.expectedOutOfScopeDeclarations', { allowEmpty: true }),
+  };
 }
 
 /**
@@ -41,7 +49,7 @@ function exactIdentities(values, label) {
  */
 export async function verifyTjsvPersistenceAdmission(cfg, verifier) {
   requireCondition(cfg?.tjsv && typeof cfg.tjsv === 'object', 'TJSV admission configuration is required');
-  const expectedDeclarations = exactIdentities(cfg.tjsv.expectedDeclarations, 'tjsv.expectedDeclarations');
+  const expected = exactReviewedScope(cfg);
   if (verifier === undefined) {
     ({ verifyConsumerContract: verifier } = await import('@oresoftware/typespec-json-schema-validator/consumer-verification'));
   }
@@ -55,7 +63,9 @@ export async function verifyTjsvPersistenceAdmission(cfg, verifier) {
     typespec: cfg.typespec,
     generatedSchema: cfg.tjsv.generatedSchema,
     authoredSchema: cfg.jsonSchema,
-    expectedDeclarations,
+    expectedDeclarations: expected.declarations,
+    expectedExcludedDeclarations: expected.excluded,
+    expectedOutOfScopeDeclarations: expected.outOfScope,
   });
 
   requireCondition(
@@ -73,9 +83,19 @@ export async function verifyTjsvPersistenceAdmission(cfg, verifier) {
     'TJSV Contract IR identities disagree',
   );
   const declarationIds = exactIdentities(verification.declarationIds, 'TJSV verified declarations');
+  const excludedDeclarationIds = exactIdentities(verification.excludedDeclarationIds ?? [], 'TJSV verified excluded declarations', { allowEmpty: true });
+  const outOfScopeDeclarationIds = exactIdentities(verification.outOfScopeDeclarationIds ?? [], 'TJSV verified out-of-scope declarations', { allowEmpty: true });
   requireCondition(
-    JSON.stringify(declarationIds) === JSON.stringify(expectedDeclarations),
+    JSON.stringify(declarationIds) === JSON.stringify(expected.declarations),
     'TJSV verified declaration scope differs from persistence admission scope',
+  );
+  requireCondition(
+    JSON.stringify(excludedDeclarationIds) === JSON.stringify(expected.excluded),
+    'TJSV verified excluded declaration scope differs from persistence admission scope',
+  );
+  requireCondition(
+    JSON.stringify(outOfScopeDeclarationIds) === JSON.stringify(expected.outOfScope),
+    'TJSV verified out-of-scope declaration scope differs from persistence admission scope',
   );
 
   return Object.freeze({
@@ -85,6 +105,8 @@ export async function verifyTjsvPersistenceAdmission(cfg, verifier) {
     contractIrId: verification.expectedIrId,
     parityRunId: verification.receiptRunId,
     declarationIds: Object.freeze(declarationIds),
+    excludedDeclarationIds: Object.freeze(excludedDeclarationIds),
+    outOfScopeDeclarationIds: Object.freeze(outOfScopeDeclarationIds),
     sources: Object.freeze({
       typespec: cfg.typespec,
       generatedJsonSchema: cfg.tjsv.generatedSchema,
@@ -98,9 +120,13 @@ export function assertTjsvPersistenceAdmission(cfg, admission) {
   requireCondition(admission.status === 'passed' && admission.admissible === true, 'TJSV persistence admission is not admissible');
   requireCondition(typeof admission.contractIrId === 'string' && HEX_256.test(admission.contractIrId), 'TJSV persistence admission has invalid Contract IR identity');
   requireCondition(typeof admission.parityRunId === 'string' && HEX_256.test(admission.parityRunId), 'TJSV persistence admission has invalid parity receipt identity');
+  const expected = exactReviewedScope(cfg);
   const declarations = exactIdentities(admission.declarationIds, 'TJSV persistence admission declarations');
-  const expected = exactIdentities(cfg.tjsv.expectedDeclarations, 'tjsv.expectedDeclarations');
-  requireCondition(JSON.stringify(declarations) === JSON.stringify(expected), 'TJSV persistence admission declaration scope is stale');
+  const excluded = exactIdentities(admission.excludedDeclarationIds ?? [], 'TJSV persistence admission excluded declarations', { allowEmpty: true });
+  const outOfScope = exactIdentities(admission.outOfScopeDeclarationIds ?? [], 'TJSV persistence admission out-of-scope declarations', { allowEmpty: true });
+  requireCondition(JSON.stringify(declarations) === JSON.stringify(expected.declarations), 'TJSV persistence admission declaration scope is stale');
+  requireCondition(JSON.stringify(excluded) === JSON.stringify(expected.excluded), 'TJSV persistence admission excluded declaration scope is stale');
+  requireCondition(JSON.stringify(outOfScope) === JSON.stringify(expected.outOfScope), 'TJSV persistence admission out-of-scope declaration scope is stale');
   requireCondition(admission.sources?.typespec === cfg.typespec, 'TJSV persistence admission TypeSpec path is stale');
   requireCondition(admission.sources?.generatedJsonSchema === cfg.tjsv.generatedSchema, 'TJSV persistence admission generated-schema path is stale');
   requireCondition(admission.sources?.authoredJsonSchema === cfg.jsonSchema, 'TJSV persistence admission authored-schema path is stale');
