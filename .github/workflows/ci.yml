@@ -36,7 +36,7 @@ jobs:
       - name: Generate persistence parity witnesses
         run: node src/cli.mjs generate --config test/fixtures/contracts.config.json
       - name: Enforce independent wire canary with TJSV
-        uses: ORESoftware/typespec-json-schema-validator@5489c98537cade78d8c558c668ef555999b8ef5c
+        uses: ORESoftware/typespec-json-schema-validator@dd3418aa243198619abfd6106cea3540ef0bbb4f
         with:
           typespec: test/tjsv-canary/main.tsp
           schema: test/tjsv-canary/schema.json
