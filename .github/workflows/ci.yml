@@ -36,7 +36,7 @@ jobs:
       - name: Generate persistence parity witnesses
         run: node src/cli.mjs generate --config test/fixtures/contracts.config.json
       - name: Enforce independent wire canary with TJSV
-        uses: ORESoftware/typespec-json-schema-validator@dd3418aa243198619abfd6106cea3540ef0bbb4f
+        uses: ORESoftware/typespec-json-schema-validator@a433a3e6c79a95986320d1d875a066b7e30d9420
         with:
           typespec: test/tjsv-canary/main.tsp
           schema: test/tjsv-canary/schema.json
@@ -78,11 +78,11 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.16.0
-      - name: Check out TJSV consumer-verification API candidate
+      - name: Check out merged canonical TJSV verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: bc00a17e0f92c580b0ea9fd50e43c629e1d82452
+          ref: a433a3e6c79a95986320d1d875a066b7e30d9420
           path: .ores-tools/tjsv
           persist-credentials: false
       - name: Install immutable TJSV toolchain
