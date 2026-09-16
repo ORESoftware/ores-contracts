@@ -5,7 +5,7 @@
 //   ores-contracts generate  [--config ...]            # writes agreed artifacts to <out>/ (only when parity passes)
 //   ores-contracts bootstrap --from json-schema|typespec [--config ...] [--force]   # draft the other authority
 //   ores-contracts db-check  --database-url URL         # apply SQL_T and SQL_J to two schemas, diff pg catalogs (Diesel-style db-first witness)
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -13,8 +13,42 @@ import { parseTypeSpec } from './parse-typespec.mjs';
 import { parseJsonSchema } from './parse-json-schema.mjs';
 import { compare, canonical, ContractError } from './ir.mjs';
 import { EMITTERS, renderTypeSpec, renderJsonSchema } from './emit/index.mjs';
+import {
+  assertTjsvPersistenceAdmission,
+  verifyTjsvPersistenceAdmission,
+} from './tjsv-admission.mjs';
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
+
+function requireConfig(condition, message) {
+  if (!condition) throw new ContractError(message, 'config.tjsv');
+}
+
+function readTjsvConfig(raw, root) {
+  if (raw === undefined || raw === null) return null;
+  requireConfig(typeof raw === 'object' && !Array.isArray(raw), 'tjsv must be an object');
+  const allowed = new Set(['contractIr', 'report', 'generatedSchema', 'expectedDeclarations']);
+  const unknown = Object.keys(raw).filter((key) => !allowed.has(key));
+  requireConfig(unknown.length === 0, `unknown tjsv option(s): ${unknown.sort().join(', ')}`);
+  for (const key of ['contractIr', 'report', 'generatedSchema']) {
+    requireConfig(typeof raw[key] === 'string' && raw[key].trim() !== '', `${key} is required when tjsv admission is configured`);
+  }
+  requireConfig(Array.isArray(raw.expectedDeclarations) && raw.expectedDeclarations.length > 0, 'expectedDeclarations must be a nonempty array');
+  const declarations = [];
+  for (let index = 0; index < raw.expectedDeclarations.length; index++) {
+    requireConfig(Object.hasOwn(raw.expectedDeclarations, index), 'expectedDeclarations may not contain holes');
+    const value = raw.expectedDeclarations[index];
+    requireConfig(typeof value === 'string' && value.trim() === value && value !== '', 'expectedDeclarations contains an invalid identity');
+    declarations.push(value);
+  }
+  requireConfig(new Set(declarations).size === declarations.length, 'expectedDeclarations contains duplicates');
+  return Object.freeze({
+    contractIr: resolve(root, raw.contractIr),
+    report: resolve(root, raw.report),
+    generatedSchema: resolve(root, raw.generatedSchema),
+    expectedDeclarations: Object.freeze([...declarations].sort()),
+  });
+}
 
 export function loadConfig(path) {
   const cfgPath = resolve(path ?? 'contracts.config.json');
@@ -28,6 +62,7 @@ export function loadConfig(path) {
     target: resolve(root, raw.target ?? 'target/ores-contracts'),
     artifacts: raw.artifacts ?? Object.keys(EMITTERS),
     tspCompile: raw.tspCompile ?? true,
+    tjsv: readTjsvConfig(raw.tjsv, root),
   });
 }
 
@@ -60,11 +95,28 @@ function writeTree(base, files) {
   }
 }
 
-/** Run the full parity check; returns the receipt. Never throws on discrepancies (they are findings). */
-export function check(cfg, { log = console.log } = {}) {
+/** Run the full persistence parity check. Configured TJSV admission is mandatory. */
+export function check(cfg, { log = console.log, admission } = {}) {
   const lanes = readAuthorities(cfg);
   const names = Object.keys(lanes);
-  const receipt = { tool: 'ores-contracts', version: '0.1.1', checkedAt: new Date().toISOString(), authorities: {}, findings: [], artifacts: {}, status: 'passed' };
+  const receipt = { tool: 'ores-contracts', version: '0.1.1', checkedAt: new Date().toISOString(), authorities: {}, tjsv: null, findings: [], artifacts: {}, status: 'passed' };
+
+  if (cfg.tjsv) {
+    try {
+      const bound = assertTjsvPersistenceAdmission(cfg, admission);
+      receipt.tjsv = {
+        schema: bound.schema,
+        contractIrId: bound.contractIrId,
+        parityRunId: bound.parityRunId,
+        declarationIds: [...bound.declarationIds],
+      };
+      log(`[contracts] TJSV current-input admission: ok (IR ${bound.contractIrId.slice(0, 12)}, receipt ${bound.parityRunId.slice(0, 12)})`);
+    } catch (error) {
+      receipt.findings.push({ kind: 'tjsv-admission', detail: error.message });
+      log(`[contracts] TJSV current-input admission: STOPPED (${error.message})`);
+    }
+  }
+
   if (names.length < 2) {
     receipt.status = 'stopped_for_evaluation';
     receipt.findings.push({ kind: 'missing-authority', detail: `need both authorities; found ${names.join(', ') || 'none'} (run bootstrap)` });
@@ -87,9 +139,9 @@ export function check(cfg, { log = console.log } = {}) {
   if (lanes.typespec && lanes['json-schema']) {
     const diffs = compare(lanes.typespec.contract, lanes['json-schema'].contract);
     for (const d of diffs) receipt.findings.push({ kind: 'authority-parity', detail: d, fingerprint: sha(d).slice(0, 16) });
-    log(`[contracts] authority parity: ${diffs.length === 0 ? 'ok' : `${diffs.length} discrepancies`}`);
+    log(`[contracts] persistence authority parity: ${diffs.length === 0 ? 'ok' : `${diffs.length} discrepancies`}`);
   }
-  // generate both lanes independently, byte-compare
+  // Generate both persistence lanes independently and byte-compare.
   const laneFiles = {};
   for (const [lane, l] of Object.entries(lanes)) {
     laneFiles[lane] = emitLane(cfg, lane, l.contract);
@@ -114,9 +166,14 @@ export function check(cfg, { log = console.log } = {}) {
   return receipt;
 }
 
+export async function checkAdmitted(cfg, { tjsvVerifier, ...opts } = {}) {
+  const admission = cfg.tjsv ? await verifyTjsvPersistenceAdmission(cfg, tjsvVerifier) : undefined;
+  return check(cfg, { ...opts, admission });
+}
+
 export function generate(cfg, opts = {}) {
   const receipt = check(cfg, opts);
-  if (receipt.status !== 'passed') throw new ContractError('parity did not pass; refusing to write generated/ (see receipt)', 'generate');
+  if (receipt.status !== 'passed') throw new ContractError('parity/admission did not pass; refusing to write generated/ (see receipt)', 'generate');
   const lanes = readAuthorities(cfg);
   const files = emitLane(cfg, 'typespec', lanes.typespec.contract); // identical to json-schema lane by parity
   const agreed = Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.replace(/from the typespec authority/g, 'from both authorities (parity-checked)')]));
@@ -124,6 +181,11 @@ export function generate(cfg, opts = {}) {
   writeFileSync(join(cfg.out, 'receipt.json'), JSON.stringify(receipt, null, 2));
   (opts.log ?? console.log)(`[contracts] wrote ${Object.keys(agreed).length} agreed artifacts to ${cfg.out}`);
   return receipt;
+}
+
+export async function generateAdmitted(cfg, { tjsvVerifier, ...opts } = {}) {
+  const admission = cfg.tjsv ? await verifyTjsvPersistenceAdmission(cfg, tjsvVerifier) : undefined;
+  return generate(cfg, { ...opts, admission });
 }
 
 export function bootstrap(cfg, from, { force = false, log = console.log } = {}) {
@@ -167,16 +229,25 @@ export function dbCheck(cfg, databaseUrl, { log = console.log } = {}) {
   return same;
 }
 
-function main(argv) {
+async function main(argv) {
   const [cmd, ...rest] = argv;
   const opt = (name) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
   const cfg = loadConfig(opt('--config'));
   try {
     switch (cmd) {
-      case 'check': { const r = check(cfg); if (opt('--database-url')) dbCheck(cfg, opt('--database-url')); return r.status === 'passed' ? 0 : 2; }
-      case 'generate': generate(cfg); return 0;
+      case 'check': {
+        const r = await checkAdmitted(cfg);
+        if (r.status !== 'passed') return 2;
+        if (opt('--database-url')) return dbCheck(cfg, opt('--database-url')) ? 0 : 2;
+        return 0;
+      }
+      case 'generate': await generateAdmitted(cfg); return 0;
       case 'bootstrap': bootstrap(cfg, opt('--from'), { force: rest.includes('--force') }); return 0;
-      case 'db-check': return dbCheck(cfg, opt('--database-url')) ? 0 : 2;
+      case 'db-check': {
+        const r = await checkAdmitted(cfg);
+        if (r.status !== 'passed') return 2;
+        return dbCheck(cfg, opt('--database-url')) ? 0 : 2;
+      }
       default: console.error('usage: ores-contracts <check|generate|bootstrap --from json-schema|typespec|db-check --database-url URL> [--config contracts.config.json]'); return 1;
     }
   } catch (e) {
@@ -184,4 +255,4 @@ function main(argv) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) process.exit(main(process.argv.slice(2)));
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(await main(process.argv.slice(2)));
