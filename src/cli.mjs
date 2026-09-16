@@ -7,7 +7,7 @@
 //   ores-contracts db-check  --database-url URL         # apply SQL_T and SQL_J to two schemas, diff pg catalogs (Diesel-style db-first witness)
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join, dirname, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseTypeSpec } from './parse-typespec.mjs';
 import { parseJsonSchema } from './parse-json-schema.mjs';
@@ -15,6 +15,15 @@ import { compare, canonical, ContractError } from './ir.mjs';
 import { EMITTERS, renderTypeSpec, renderJsonSchema } from './emit/index.mjs';
 
 const sha = (s) => createHash('sha256').update(s).digest('hex');
+const stable = (value) => {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+  }
+  return value;
+};
+const stableJson = (value) => JSON.stringify(stable(value));
+const receiptPath = (root, path) => relative(root, path).replaceAll('\\', '/');
 
 export function loadConfig(path) {
   const cfgPath = resolve(path ?? 'contracts.config.json');
@@ -64,13 +73,36 @@ function writeTree(base, files) {
 export function check(cfg, { log = console.log } = {}) {
   const lanes = readAuthorities(cfg);
   const names = Object.keys(lanes);
-  const receipt = { tool: 'ores-contracts', version: '0.1.1', checkedAt: new Date().toISOString(), authorities: {}, findings: [], artifacts: {}, status: 'passed' };
+  const sourceClosure = {
+    artifacts: [...cfg.artifacts].sort(),
+    authorities: {
+      'json-schema': lanes['json-schema'] ? { path: receiptPath(cfg.root, cfg.jsonSchema), sha256: lanes['json-schema'].digest } : null,
+      typespec: lanes.typespec ? { path: receiptPath(cfg.root, cfg.typespec), sha256: lanes.typespec.digest } : null,
+    },
+    tspCompile: Boolean(cfg.tspCompile),
+  };
+  const receipt = {
+    schema: 'ores.contracts.receipt/v2',
+    tool: 'ores-contracts',
+    version: '0.1.1',
+    sourceClosure,
+    sourceClosureId: sha(stableJson(sourceClosure)),
+    authorities: {},
+    findings: [],
+    artifacts: {},
+    status: 'passed',
+  };
   if (names.length < 2) {
     receipt.status = 'stopped_for_evaluation';
     receipt.findings.push({ kind: 'missing-authority', detail: `need both authorities; found ${names.join(', ') || 'none'} (run bootstrap)` });
   }
   for (const [lane, l] of Object.entries(lanes)) {
-    receipt.authorities[lane] = { path: lane === 'typespec' ? cfg.typespec : cfg.jsonSchema, sha256: l.digest, models: l.contract.models.map((m) => m.name), enums: Object.keys(l.contract.enums) };
+    receipt.authorities[lane] = {
+      path: receiptPath(cfg.root, lane === 'typespec' ? cfg.typespec : cfg.jsonSchema),
+      sha256: l.digest,
+      models: l.contract.models.map((m) => m.name),
+      enums: Object.keys(l.contract.enums),
+    };
     log(`[contracts] ${lane}: ${l.contract.models.length} models, ${Object.keys(l.contract.enums).length} enums (sha256 ${l.digest.slice(0, 12)})`);
   }
   if (cfg.tspCompile && lanes.typespec) {
@@ -79,9 +111,10 @@ export function check(cfg, { log = console.log } = {}) {
       receipt.authorities.typespec.tspCompile = 'ok';
       log('[contracts] tsp compile: ok');
     } catch (e) {
-      const msg = String(e.stderr ?? e.message).trim().split('\n').slice(-3).join(' | ');
-      if (/not found|ENOENT|could not determine executable|npm ERR/i.test(msg)) { receipt.authorities.typespec.tspCompile = 'skipped (tsp not installed)'; log('[contracts] tsp compile: skipped (@typespec/compiler not installed)'); }
-      else { receipt.authorities.typespec.tspCompile = 'failed'; receipt.findings.push({ kind: 'typespec-compile', detail: msg }); }
+      const msg = String(e.stderr ?? e.message).trim().split('\n').slice(-3).join(' | ') || String(e.message);
+      receipt.authorities.typespec.tspCompile = 'failed';
+      receipt.findings.push({ kind: 'typespec-compile', detail: msg, fingerprint: sha(msg).slice(0, 16) });
+      log('[contracts] tsp compile: failed');
     }
   }
   if (lanes.typespec && lanes['json-schema']) {
@@ -107,6 +140,7 @@ export function check(cfg, { log = console.log } = {}) {
     log(`[contracts] artifact byte parity: ${Object.values(receipt.artifacts).every((x) => x.byteParity) ? 'ok' : 'MISMATCH'} (${cfg.artifacts.length} artifacts)`);
   }
   if (receipt.findings.length) receipt.status = 'stopped_for_evaluation';
+  receipt.receiptId = sha(stableJson(receipt));
   mkdirSync(cfg.target, { recursive: true });
   writeFileSync(join(cfg.target, 'receipt.json'), JSON.stringify(receipt, null, 2));
   log(`[contracts] ${receipt.status.toUpperCase()} — receipt ${join(cfg.target, 'receipt.json')}`);
