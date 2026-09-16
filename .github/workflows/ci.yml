@@ -36,7 +36,7 @@ jobs:
       - name: Generate persistence parity witnesses
         run: node src/cli.mjs generate --config test/fixtures/contracts.config.json
       - name: Enforce independent wire canary with TJSV
-        uses: ORESoftware/typespec-json-schema-validator@dd3418aa243198619abfd6106cea3540ef0bbb4f
+        uses: ORESoftware/typespec-json-schema-validator@a433a3e6c79a95986320d1d875a066b7e30d9420
         with:
           typespec: test/tjsv-canary/main.tsp
           schema: test/tjsv-canary/schema.json
@@ -58,6 +58,113 @@ jobs:
         with:
           name: ores-contracts-tjsv
           path: ${{ runner.temp }}/ores-contracts-tjsv.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  tjsv-persistence-binding:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact ores-contracts revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact ores-contracts revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+      - name: Check out reviewed TJSV scope verifier candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: da1805777a7eb36f672e14bb1a2d1650d75d8511
+          path: .ores-tools/tjsv
+          persist-credentials: false
+      - name: Install immutable TJSV toolchain
+        run: npm ci --prefix .ores-tools/tjsv
+      - name: Make the reviewed TJSV package available to ores-contracts
+        run: |
+          mkdir -p node_modules/@oresoftware
+          ln -s "$GITHUB_WORKSPACE/.ores-tools/tjsv" node_modules/@oresoftware/typespec-json-schema-validator
+      - name: Produce exact parity report, generated Schema B and Contract IR
+        run: |
+          node .ores-tools/tjsv/bin/typespec-json-schema-validator.mjs check \
+            --typespec=test/fixtures/typespec/main.tsp \
+            --schema=test/fixtures/json-schema/contract.schema.json \
+            --mapping=test/fixtures/tjsv.mapping.json \
+            --output-dir="$RUNNER_TEMP/tjsv-generated" \
+            --report="$RUNNER_TEMP/tjsv-report.json" \
+            --contract-ir="$RUNNER_TEMP/contract-ir.json" \
+            --int64-strategy=number \
+            --seal-object-schemas=true \
+            --sarif=
+      - name: Run persistence convergence through canonical current-input verification
+        env:
+          ADMITTED_CONFIG: ${{ runner.temp }}/contracts.tjsv.config.json
+          CONTRACT_IR: ${{ runner.temp }}/contract-ir.json
+          PARITY_REPORT: ${{ runner.temp }}/tjsv-report.json
+          GENERATED_SCHEMA: ${{ runner.temp }}/tjsv-generated/typespec.generated.schema.json
+          TARGET: ${{ runner.temp }}/ores-contracts-target
+          OUT: ${{ runner.temp }}/ores-contracts-generated
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          import { resolve } from 'node:path';
+          const root = process.cwd();
+          writeFileSync(process.env.ADMITTED_CONFIG, JSON.stringify({
+            typespec: resolve(root, 'test/fixtures/typespec/main.tsp'),
+            jsonSchema: resolve(root, 'test/fixtures/json-schema/contract.schema.json'),
+            out: process.env.OUT,
+            target: process.env.TARGET,
+            artifacts: [
+              'sql/schema.sql',
+              'rust/types.rs',
+              'seaorm/entities.rs',
+              'diesel/schema.rs',
+              'typescript/types.d.ts',
+              'typescript/validate.mjs',
+              'dart/models.dart'
+            ],
+            tspCompile: true,
+            tjsv: {
+              contractIr: process.env.CONTRACT_IR,
+              report: process.env.PARITY_REPORT,
+              generatedSchema: process.env.GENERATED_SCHEMA,
+              expectedDeclarations: [
+                'Acme.Billing.Customer',
+                'Acme.Billing.Invoice',
+                'Acme.Billing.InvoiceStatus'
+              ],
+              expectedExcludedDeclarations: [
+                'typespec-generated-json-schema:RecordUnknown'
+              ],
+              expectedOutOfScopeDeclarations: [
+                'typespec:$decorators',
+                'typespec:Ores.index',
+                'typespec:Ores.references',
+                'typespec:Ores.table',
+                'typespec:Ores.unique'
+              ]
+            }
+          }, null, 2));
+          NODE
+          node src/cli.mjs check --config "$ADMITTED_CONFIG"
+      - name: Prove tracked sources are unchanged
+        run: git diff --exit-code
+      - name: Retain cross-repo admission evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ores-contracts-tjsv-persistence-binding
+          path: |
+            ${{ runner.temp }}/tjsv-report.json
+            ${{ runner.temp }}/contract-ir.json
+            ${{ runner.temp }}/ores-contracts-target/receipt.json
           if-no-files-found: warn
           retention-days: 14
 

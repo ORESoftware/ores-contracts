@@ -75,7 +75,7 @@ test('check → generate writes agreed artifacts; check refuses generate on mism
   assert.equal(r2.status, 'stopped_for_evaluation');
   assert.ok(r2.findings.some((f) => f.kind === 'authority-parity' && /maxLength/.test(f.detail)));
   assert.ok(r2.findings.some((f) => f.kind === 'artifact-parity' && /sql/.test(f.detail)));
-  assert.throws(() => generate(cfg, quiet), /parity did not pass/);
+  assert.throws(() => generate(cfg, quiet), /parity\/admission did not pass/);
 });
 
 test('bootstrap command refuses to overwrite without --force', () => {
