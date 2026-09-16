@@ -24,29 +24,42 @@ function requireConfig(condition, message) {
   if (!condition) throw new ContractError(message, 'config.tjsv');
 }
 
+function readIdentityList(value, label, { allowEmpty = false } = {}) {
+  requireConfig(Array.isArray(value) && (allowEmpty || value.length > 0), `${label} must be ${allowEmpty ? 'an array' : 'a nonempty array'}`);
+  const identities = [];
+  for (let index = 0; index < value.length; index++) {
+    requireConfig(Object.hasOwn(value, index), `${label} may not contain holes`);
+    const identity = value[index];
+    requireConfig(typeof identity === 'string' && identity.trim() === identity && identity !== '', `${label} contains an invalid identity`);
+    identities.push(identity);
+  }
+  requireConfig(new Set(identities).size === identities.length, `${label} contains duplicates`);
+  return Object.freeze([...identities].sort());
+}
+
 function readTjsvConfig(raw, root) {
   if (raw === undefined || raw === null) return null;
   requireConfig(typeof raw === 'object' && !Array.isArray(raw), 'tjsv must be an object');
-  const allowed = new Set(['contractIr', 'report', 'generatedSchema', 'expectedDeclarations']);
+  const allowed = new Set([
+    'contractIr',
+    'report',
+    'generatedSchema',
+    'expectedDeclarations',
+    'expectedExcludedDeclarations',
+    'expectedOutOfScopeDeclarations',
+  ]);
   const unknown = Object.keys(raw).filter((key) => !allowed.has(key));
   requireConfig(unknown.length === 0, `unknown tjsv option(s): ${unknown.sort().join(', ')}`);
   for (const key of ['contractIr', 'report', 'generatedSchema']) {
     requireConfig(typeof raw[key] === 'string' && raw[key].trim() !== '', `${key} is required when tjsv admission is configured`);
   }
-  requireConfig(Array.isArray(raw.expectedDeclarations) && raw.expectedDeclarations.length > 0, 'expectedDeclarations must be a nonempty array');
-  const declarations = [];
-  for (let index = 0; index < raw.expectedDeclarations.length; index++) {
-    requireConfig(Object.hasOwn(raw.expectedDeclarations, index), 'expectedDeclarations may not contain holes');
-    const value = raw.expectedDeclarations[index];
-    requireConfig(typeof value === 'string' && value.trim() === value && value !== '', 'expectedDeclarations contains an invalid identity');
-    declarations.push(value);
-  }
-  requireConfig(new Set(declarations).size === declarations.length, 'expectedDeclarations contains duplicates');
   return Object.freeze({
     contractIr: resolve(root, raw.contractIr),
     report: resolve(root, raw.report),
     generatedSchema: resolve(root, raw.generatedSchema),
-    expectedDeclarations: Object.freeze([...declarations].sort()),
+    expectedDeclarations: readIdentityList(raw.expectedDeclarations, 'expectedDeclarations'),
+    expectedExcludedDeclarations: readIdentityList(raw.expectedExcludedDeclarations ?? [], 'expectedExcludedDeclarations', { allowEmpty: true }),
+    expectedOutOfScopeDeclarations: readIdentityList(raw.expectedOutOfScopeDeclarations ?? [], 'expectedOutOfScopeDeclarations', { allowEmpty: true }),
   });
 }
 
@@ -109,6 +122,8 @@ export function check(cfg, { log = console.log, admission } = {}) {
         contractIrId: bound.contractIrId,
         parityRunId: bound.parityRunId,
         declarationIds: [...bound.declarationIds],
+        excludedDeclarationIds: [...bound.excludedDeclarationIds],
+        outOfScopeDeclarationIds: [...bound.outOfScopeDeclarationIds],
       };
       log(`[contracts] TJSV current-input admission: ok (IR ${bound.contractIrId.slice(0, 12)}, receipt ${bound.parityRunId.slice(0, 12)})`);
     } catch (error) {
@@ -251,7 +266,7 @@ async function main(argv) {
       default: console.error('usage: ores-contracts <check|generate|bootstrap --from json-schema|typespec|db-check --database-url URL> [--config contracts.config.json]'); return 1;
     }
   } catch (e) {
-    console.error(`[contracts] error: ${e.message}`); return e instanceof ContractError ? 2 : 1;
+    console.error(`[contracts] error: ${e.message}`); return 1;
   }
 }
 
