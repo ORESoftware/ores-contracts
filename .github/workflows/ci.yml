@@ -78,11 +78,11 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.16.0
-      - name: Check out merged canonical TJSV verifier
+      - name: Check out reviewed TJSV scope verifier candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: a433a3e6c79a95986320d1d875a066b7e30d9420
+          ref: da1805777a7eb36f672e14bb1a2d1650d75d8511
           path: .ores-tools/tjsv
           persist-credentials: false
       - name: Install immutable TJSV toolchain
@@ -139,6 +139,16 @@ jobs:
                 'Acme.Billing.Customer',
                 'Acme.Billing.Invoice',
                 'Acme.Billing.InvoiceStatus'
+              ],
+              expectedExcludedDeclarations: [
+                'typespec-generated-json-schema:RecordUnknown'
+              ],
+              expectedOutOfScopeDeclarations: [
+                'typespec:$decorators',
+                'typespec:Ores.index',
+                'typespec:Ores.references',
+                'typespec:Ores.table',
+                'typespec:Ores.unique'
               ]
             }
           }, null, 2));
