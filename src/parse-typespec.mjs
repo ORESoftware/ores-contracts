@@ -24,6 +24,10 @@ function decoratorsOf(prefix) {
 
 function csv(s) { return String(s).split(',').map((x) => x.trim()).filter(Boolean); }
 
+function recordValueType(typeExpr) {
+  return /^Record<\s*([A-Za-z_][A-Za-z0-9_.]*)\s*>$/.exec(typeExpr)?.[1] ?? null;
+}
+
 export function parseTypeSpec(source, where = 'main.tsp') {
   const src = stripComments(source);
   const ns = src.match(/\bnamespace\s+([A-Za-z_][A-Za-z0-9_.]*)\s*;/);
@@ -56,19 +60,41 @@ export function parseTypeSpec(source, where = 'main.tsp') {
     // fields: decorators may precede on the same or previous lines; split on ';'
     for (const stmt of body.split(';')) {
       const t = stmt.trim(); if (!t) continue;
-      const fm = t.match(/^([\s\S]*?)([A-Za-z_][A-Za-z0-9_]*)(\?)?\s*:\s*([A-Za-z_][A-Za-z0-9_.]*)(\[\])?$/);
+      const fm = t.match(/^([\s\S]*?)([A-Za-z_][A-Za-z0-9_]*)(\?)?\s*:\s*((?:Record<\s*[A-Za-z_][A-Za-z0-9_.]*\s*>)|[A-Za-z_][A-Za-z0-9_.]*)(\[\])?$/);
       if (!fm) throw new ContractError(`unsupported field \`${t.replace(/\s+/g, ' ')}\``, `${where}:model ${name}`);
-      const [, prefix, fname, opt, type, arr] = fm;
+      const [, prefix, fname, opt, typeExpr, arr] = fm;
       const fd = decoratorsOf(prefix);
-      const isEnum = !!enums[type];
-      if (!isEnum && !SCALARS[type]) throw new ContractError(`unsupported type ${type}`, `${where}:${name}.${fname}`);
+      const recordValue = recordValueType(typeExpr);
+      const isEnum = !recordValue && !!enums[typeExpr];
+      if (recordValue) {
+        const recordValueIsEnum = !!enums[recordValue];
+        if (!recordValueIsEnum && !SCALARS[recordValue]) {
+          throw new ContractError(`unsupported Record value type ${recordValue}`, `${where}:${name}.${fname}`);
+        }
+        if (arr) {
+          throw new ContractError('arrays of Record<T> are outside the supported subset', `${where}:${name}.${fname}`);
+        }
+      } else if (!isEnum && !SCALARS[typeExpr]) {
+        throw new ContractError(`unsupported type ${typeExpr}`, `${where}:${name}.${fname}`);
+      }
       if (fd.some((d) => d.name === 'key')) primaryKey.push(fname);
       const ref = fd.find((d) => d.name === 'Ores.references' || d.name === 'references');
       const refParts = ref ? String(ref.args[0]).split('.') : null;
       if (ref && refParts.length !== 2) throw new ContractError('@Ores.references expects "Model.field"', `${where}:${name}.${fname}`);
+      if (ref && recordValue) throw new ContractError('Record<T> fields cannot be foreign keys', `${where}:${name}.${fname}`);
       const maxLength = fd.find((d) => d.name === 'maxLength')?.args[0] ?? null;
       const fdoc = fd.find((d) => d.name === 'doc')?.args[0] ?? null;
-      fields.push(field({ name: fname, type: isEnum ? 'enum' : type, nullable: !!opt, array: !!arr, enumName: isEnum ? type : null, enumValues: isEnum ? enums[type] : [], maxLength, references: ref ? { model: refParts[0], field: refParts[1] } : null, doc: fdoc }));
+      fields.push(field({
+        name: fname,
+        type: recordValue ? 'json' : isEnum ? 'enum' : typeExpr,
+        nullable: !!opt,
+        array: !!arr,
+        enumName: isEnum ? typeExpr : null,
+        enumValues: isEnum ? enums[typeExpr] : [],
+        maxLength,
+        references: ref ? { model: refParts[0], field: refParts[1] } : null,
+        doc: fdoc,
+      }));
     }
     models.push(model({ name, table, primaryKey, unique, indexes, fields, doc }));
   }
