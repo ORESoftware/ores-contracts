@@ -28,6 +28,7 @@ subset fails closed in **both** parsers.
 | bytes | `bytes` | `{ type: "string", format: "byte" }` |
 | json | `json` | `{ type: "object", "x-ores-json": true }` |
 | docs | `@doc("…")` | `description` |
+| escaped field identifier | `` `op`: T `` → wire/persistence name `op` | ordinary property name `"op"` |
 
 `Record<T>` is a persistence projection, not permission to ignore the value
 schema. `ores-contracts` normalizes it to JSONB/JSON in generated persistence
@@ -35,6 +36,8 @@ artifacts; TJSV or another runtime-schema checker must still prove that the
 TypeSpec and independently authored JSON Schema agree on the values accepted for
 arbitrary keys. Nested `Record<Record<...>>`, arrays of records, and unknown
 record value types remain outside the supported persistence subset.
+
+TypeSpec field identifiers may be backtick-escaped only when the unescaped spelling is still a normal identifier. This exists for reserved words such as `` `op` `` and preserves the exact wire/database name; escaping does not admit punctuation, whitespace, or alternate wire spellings. The parser scans comments, quoted strings, decorator object literals, and model bodies structurally so declaration-looking text inside docs/comments cannot become a persistence declaration. Field declarations must end in semicolons and malformed delimiter/comment structure fails closed.
 
 Field names are camelCase in both authorities; SQL/Rust/Dart emitters
 snake_case columns and fields, TypeScript keeps camelCase (matching the JSON
