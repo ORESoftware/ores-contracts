@@ -28,6 +28,21 @@ function recordValueType(typeExpr) {
   return /^Record<\s*([A-Za-z_][A-Za-z0-9_.]*)\s*>$/.exec(typeExpr)?.[1] ?? null;
 }
 
+function persistenceIdentifier(raw, where) {
+  if (!raw.startsWith('`')) return raw;
+  if (!raw.endsWith('`') || raw.length < 3) {
+    throw new ContractError(`invalid escaped identifier ${raw}`, where);
+  }
+  const value = raw.slice(1, -1);
+  // The persistence subset permits escaping a normal identifier solely so
+  // TypeSpec keywords such as `op` can retain their exact wire/database name.
+  // Arbitrary punctuation/whitespace remains outside the bounded subset.
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+    throw new ContractError(`unsupported escaped identifier ${raw}`, where);
+  }
+  return value;
+}
+
 function persistenceScalar(typeExpr, decorators, where) {
   const format = decorators.find((d) => d.name === 'format' || d.name === 'TypeSpec.format')?.args[0] ?? null;
   if (format !== null) {
@@ -70,9 +85,10 @@ export function parseTypeSpec(source, where = 'main.tsp') {
     // fields: decorators may precede on the same or previous lines; split on ';'
     for (const stmt of body.split(';')) {
       const t = stmt.trim(); if (!t) continue;
-      const fm = t.match(/^([\s\S]*?)([A-Za-z_][A-Za-z0-9_]*)(\?)?\s*:\s*((?:Record<\s*[A-Za-z_][A-Za-z0-9_.]*\s*>)|[A-Za-z_][A-Za-z0-9_.]*)(\[\])?$/);
+      const fm = t.match(/^([\s\S]*?)(`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)(\?)?\s*:\s*((?:Record<\s*[A-Za-z_][A-Za-z0-9_.]*\s*>)|[A-Za-z_][A-Za-z0-9_.]*)(\[\])?$/);
       if (!fm) throw new ContractError(`unsupported field \`${t.replace(/\s+/g, ' ')}\``, `${where}:model ${name}`);
-      const [, prefix, fname, opt, typeExpr, arr] = fm;
+      const [, prefix, rawFname, opt, typeExpr, arr] = fm;
+      const fname = persistenceIdentifier(rawFname, `${where}:model ${name}`);
       const fd = decoratorsOf(prefix);
       const recordValue = recordValueType(typeExpr);
       const isEnum = !recordValue && !!enums[typeExpr];
