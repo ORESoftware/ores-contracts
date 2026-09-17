@@ -41,7 +41,7 @@ test('escaped TypeSpec keyword identifiers preserve the exact persistence and wi
   assert.equal(event.fields.find((field) => field.name === 'vectorClock')?.type, 'json');
   assert.deepEqual(event.unique, [['op']]);
   assert.deepEqual(event.indexes, [['op']]);
-  assert.match(EMITTERS['sql/schema.sql'](contract, 'test'), /\bop sync_op NOT NULL\b/);
+  assert.match(EMITTERS['sql/schema.sql'](contract, 'test'), /"op" "sync_op" NOT NULL/);
   assert.match(EMITTERS['rust/types.rs'](contract, 'test'), /pub op: SyncOp/);
   assert.match(EMITTERS['typescript/types.d.ts'](contract, 'test'), /\bop: SyncOp;/);
 });
