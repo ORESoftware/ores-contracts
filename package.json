@@ -4,7 +4,7 @@
   "description": "Independent TypeSpec and JSON Schema authorities → parity-checked SQL, SeaORM (code-first), Diesel (db-first), Rust, TypeScript and Dart artifacts for *-interfaces, *-orm-core, *-clients and servers.",
   "type": "module",
   "license": "MIT",
-  "bin": { "ores-contracts": "src/cli.mjs" },
+  "bin": { "ores-contracts": "bin/ores-contracts.mjs" },
   "exports": {
     ".": "./src/cli.mjs",
     "./ir": "./src/ir.mjs",
