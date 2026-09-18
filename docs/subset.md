@@ -20,16 +20,16 @@ subset fails closed in **both** parsers.
 | array | `T[]` | `{ type: "array", items: … }` |
 | typed JSON map | `Record<T>` for supported scalar/enum `T` | `{ type: "object", "x-ores-json": true, additionalProperties: <T schema> }` |
 | string / maxLength | `string`, `@maxLength(n)` | `{ type: "string", maxLength: n }` |
-| uuid | `uuid` | `{ type: "string", format: "uuid" }` |
+| uuid | `@format("uuid") id: string` | `{ type: "string", format: "uuid" }` |
 | int32 / int64 | `int32` / `int64` | `{ type: "integer", "x-ores-width": 32|64 }` (default 32) |
 | float64 | `float64` | `{ type: "number" }` |
 | boolean | `boolean` | `{ type: "boolean" }` |
 | utcDateTime / plainDate | `utcDateTime` / `plainDate` | `format: "date-time"` / `format: "date"` |
 | bytes | `bytes` | `{ type: "string", format: "byte" }` |
-| json | `json` | `{ type: "object", "x-ores-json": true }` |
+| open JSON object | `Record<unknown>` | `{ type: "object", "x-ores-json": true }` |
 | docs | `@doc("…")` | `description` |
 
-`Record<T>` is a persistence projection, not permission to ignore the value
+The TypeSpec column uses current TypeSpec 1.x wire constructs; `uuid` and `json` pseudo-scalars are not part of this authored subset.\n\n`Record<T>` is a persistence projection, not permission to ignore the value
 schema. `ores-contracts` normalizes it to JSONB/JSON in generated persistence
 artifacts; TJSV or another runtime-schema checker must still prove that the
 TypeSpec and independently authored JSON Schema agree on the values accepted for
