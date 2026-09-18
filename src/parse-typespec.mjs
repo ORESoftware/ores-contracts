@@ -6,6 +6,22 @@ import { field, model, finalize, ContractError, SCALARS } from './ir.mjs';
 const DECORATOR_RE = /@([A-Za-z_][A-Za-z0-9_.]*)(?:\(([^)]*)\))?/g;
 const ENUM_HEADER_RE = /\benum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/g;
 const MODEL_HEADER_RE = /((?:@[A-Za-z_][A-Za-z0-9_.]*(?:\([^)]*\))?\s*)*)\bmodel\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/g;
+const MODEL_DECORATORS = new Set([
+  'Ores.table', 'table',
+  'Ores.unique', 'unique',
+  'Ores.index', 'index',
+  'doc', 'TypeSpec.doc',
+]);
+const FIELD_DECORATORS = new Set([
+  'key', 'TypeSpec.key',
+  'format', 'TypeSpec.format',
+  'Ores.references', 'references',
+  'maxLength', 'TypeSpec.maxLength',
+  'doc', 'TypeSpec.doc',
+  // Reviewed wire-only TypeSpec JSON Schema extension. TJSV owns its semantics;
+  // persistence projection merely permits it to coexist with persisted fields.
+  'TypeSpec.JsonSchema.extension',
+]);
 
 function stripComments(source, where) {
   let out = '';
@@ -113,6 +129,32 @@ function decoratorsOf(prefix) {
 
 function csv(s) { return String(s).split(',').map((x) => x.trim()).filter(Boolean); }
 
+function assertKnownDecorators(decorators, allowed, where) {
+  for (const decorator of decorators) {
+    if (!allowed.has(decorator.name)) {
+      throw new ContractError(`unsupported decorator @${decorator.name}`, where);
+    }
+  }
+}
+
+function matchingDecorators(decorators, names) {
+  const accepted = new Set(names);
+  return decorators.filter((decorator) => accepted.has(decorator.name));
+}
+
+function atMostOneDecorator(decorators, names, label, where) {
+  const matches = matchingDecorators(decorators, names);
+  if (matches.length > 1) throw new ContractError(`${label} may appear at most once`, where);
+  return matches[0] ?? null;
+}
+
+function oneArgument(decorator, label, where) {
+  if (!decorator || decorator.args.length !== 1 || decorator.args[0] === undefined || decorator.args[0] === '') {
+    throw new ContractError(`${label} expects exactly one argument`, where);
+  }
+  return decorator.args[0];
+}
+
 function recordValueType(typeExpr) {
   return /^Record<\s*([A-Za-z_][A-Za-z0-9_.]*)\s*>$/.exec(typeExpr)?.[1] ?? null;
 }
@@ -198,8 +240,14 @@ function splitStatements(body, where) {
 }
 
 function persistenceScalar(typeExpr, decorators, where) {
-  const format = decorators.find((d) => d.name === 'format' || d.name === 'TypeSpec.format')?.args[0] ?? null;
-  if (format !== null) {
+  const formatDecorator = atMostOneDecorator(
+    decorators,
+    ['format', 'TypeSpec.format'],
+    '@format',
+    where,
+  );
+  if (formatDecorator) {
+    const format = oneArgument(formatDecorator, '@format', where);
     if (typeExpr !== 'string') throw new ContractError('@format persistence projection is only supported on string fields', where);
     if (format !== 'uuid') throw new ContractError(`unsupported persistence string format ${format}`, where);
     return 'uuid';
@@ -243,12 +291,20 @@ export function parseTypeSpec(source, where = 'main.tsp') {
     const { body, closeIndex } = scanBalancedBody(src, openIndex, `${where}:model ${name}`);
     MODEL_HEADER_RE.lastIndex = closeIndex + 1;
 
+    const modelWhere = `${where}:model ${name}`;
     const decos = decoratorsOf(decoPrefix);
-    const table = decos.find((d) => d.name === 'Ores.table' || d.name === 'table')?.args[0] ?? null;
-    if (!table) throw new ContractError('model needs @Ores.table("name")', `${where}:model ${name}`);
-    const unique = decos.filter((d) => d.name === 'Ores.unique' || d.name === 'unique').map((d) => csv(d.args[0]));
-    const indexes = decos.filter((d) => d.name === 'Ores.index' || d.name === 'index').map((d) => csv(d.args[0]));
-    const doc = decos.find((d) => d.name === 'doc')?.args[0] ?? null;
+    assertKnownDecorators(decos, MODEL_DECORATORS, modelWhere);
+    const tableDecorator = atMostOneDecorator(decos, ['Ores.table', 'table'], '@Ores.table', modelWhere);
+    const table = tableDecorator ? oneArgument(tableDecorator, '@Ores.table', modelWhere) : null;
+    if (!table) throw new ContractError('model needs @Ores.table("name")', modelWhere);
+    const unique = matchingDecorators(decos, ['Ores.unique', 'unique'])
+      .map((decorator) => csv(oneArgument(decorator, '@Ores.unique', modelWhere)));
+    const indexes = matchingDecorators(decos, ['Ores.index', 'index'])
+      .map((decorator) => csv(oneArgument(decorator, '@Ores.index', modelWhere)));
+    if (unique.some((columns) => columns.length === 0)) throw new ContractError('@Ores.unique requires at least one field', modelWhere);
+    if (indexes.some((columns) => columns.length === 0)) throw new ContractError('@Ores.index requires at least one field', modelWhere);
+    const docDecorator = atMostOneDecorator(decos, ['doc', 'TypeSpec.doc'], '@doc', modelWhere);
+    const doc = docDecorator ? oneArgument(docDecorator, '@doc', modelWhere) : null;
     const fields = []; const primaryKey = [];
 
     for (const stmt of splitStatements(body, `${where}:model ${name}`)) {
@@ -257,7 +313,14 @@ export function parseTypeSpec(source, where = 'main.tsp') {
       if (!fm) throw new ContractError(`unsupported field \`${t.replace(/\s+/g, ' ')}\``, `${where}:model ${name}`);
       const [, prefix, rawFname, opt, typeExpr, arr] = fm;
       const fname = persistenceIdentifier(rawFname, `${where}:model ${name}`);
+      const fieldWhere = `${where}:${name}.${fname}`;
       const fd = decoratorsOf(prefix);
+      assertKnownDecorators(fd, FIELD_DECORATORS, fieldWhere);
+      const keyDecorator = atMostOneDecorator(fd, ['key', 'TypeSpec.key'], '@key', fieldWhere);
+      if (keyDecorator && keyDecorator.args.length !== 0) throw new ContractError('@key does not accept arguments', fieldWhere);
+      const ref = atMostOneDecorator(fd, ['Ores.references', 'references'], '@Ores.references', fieldWhere);
+      const maxLengthDecorator = atMostOneDecorator(fd, ['maxLength', 'TypeSpec.maxLength'], '@maxLength', fieldWhere);
+      const fieldDocDecorator = atMostOneDecorator(fd, ['doc', 'TypeSpec.doc'], '@doc', fieldWhere);
       const recordValue = recordValueType(typeExpr);
       const isEnum = !recordValue && !!enums[typeExpr];
       let persistenceType = null;
@@ -274,13 +337,16 @@ export function parseTypeSpec(source, where = 'main.tsp') {
         persistenceType = persistenceScalar(typeExpr, fd, `${where}:${name}.${fname}`);
         if (!SCALARS[persistenceType]) throw new ContractError(`unsupported type ${typeExpr}`, `${where}:${name}.${fname}`);
       }
-      if (fd.some((d) => d.name === 'key')) primaryKey.push(fname);
-      const ref = fd.find((d) => d.name === 'Ores.references' || d.name === 'references');
-      const refParts = ref ? String(ref.args[0]).split('.') : null;
-      if (ref && refParts.length !== 2) throw new ContractError('@Ores.references expects "Model.field"', `${where}:${name}.${fname}`);
-      if (ref && recordValue) throw new ContractError('Record<T> fields cannot be foreign keys', `${where}:${name}.${fname}`);
-      const maxLength = fd.find((d) => d.name === 'maxLength')?.args[0] ?? null;
-      const fdoc = fd.find((d) => d.name === 'doc')?.args[0] ?? null;
+      if (keyDecorator) primaryKey.push(fname);
+      const refTarget = ref ? oneArgument(ref, '@Ores.references', fieldWhere) : null;
+      const refParts = ref ? String(refTarget).split('.') : null;
+      if (ref && refParts.length !== 2) throw new ContractError('@Ores.references expects "Model.field"', fieldWhere);
+      if (ref && recordValue) throw new ContractError('Record<T> fields cannot be foreign keys', fieldWhere);
+      const maxLength = maxLengthDecorator ? oneArgument(maxLengthDecorator, '@maxLength', fieldWhere) : null;
+      if (maxLength !== null && (!Number.isSafeInteger(maxLength) || maxLength < 0)) {
+        throw new ContractError('@maxLength expects a non-negative integer', fieldWhere);
+      }
+      const fdoc = fieldDocDecorator ? oneArgument(fieldDocDecorator, '@doc', fieldWhere) : null;
       fields.push(field({
         name: fname,
         type: persistenceType,

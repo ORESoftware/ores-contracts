@@ -52,6 +52,43 @@ test('parsers fail closed on unsupported constructs', () => {
   assert.throws(() => parseJsonSchema({ 'x-ores-namespace': 'X', $defs: { A: { type: 'object', additionalProperties: false, 'x-ores-table': 'a', 'x-ores-primary-key': ['id'], required: ['id'], properties: { id: { type: 'string', format: 'email' } } } } }), /unsupported string format/);
 });
 
+test('TypeSpec 1.16 UUID and open JSON map constructs project into persistence IR', () => {
+  const contract = parseTypeSpec([
+    'namespace X;',
+    '@Ores.table("records")',
+    'model RecordModel {',
+    '  @key @format("uuid") id: string;',
+    '  metadata?: Record<unknown>;',
+    '}',
+  ].join('\n'));
+  const record = contract.models[0];
+  assert.equal(record.fields.find((f) => f.name === 'id').type, 'uuid');
+  assert.equal(record.fields.find((f) => f.name === 'metadata').type, 'json');
+  assert.equal(record.fields.find((f) => f.name === 'metadata').nullable, true);
+});
+
+test('TypeSpec persistence decorator surface fails closed', () => {
+  const valid = (field) => [
+    'namespace X;',
+    '@Ores.table("records")',
+    'model RecordModel {',
+    '  @key @format("uuid") id: string;',
+    `  ${field}`,
+    '}',
+  ].join('\n');
+
+  assert.throws(
+    () => parseTypeSpec('namespace X;\n@Ores.replica("read") @Ores.table("records") model RecordModel { @key @format("uuid") id: string; }'),
+    /unsupported decorator @Ores\.replica/,
+  );
+  assert.throws(() => parseTypeSpec(valid('@opaque note: string;')), /unsupported decorator @opaque/);
+  assert.throws(() => parseTypeSpec(valid('@format("uuid") @format("uuid") externalId: string;')), /@format may appear at most once/);
+  assert.throws(() => parseTypeSpec(valid('@format("email") email: string;')), /unsupported persistence string format email/);
+  assert.throws(() => parseTypeSpec(valid('@format("uuid") count: int64;')), /@format persistence projection is only supported on string fields/);
+  assert.throws(() => parseTypeSpec(valid('@key("unexpected") otherId: string;')), /@key does not accept arguments/);
+  assert.throws(() => parseTypeSpec(valid('@maxLength(12) @maxLength(13) label: string;')), /@maxLength may appear at most once/);
+});
+
 test('bootstrap round-trips: json-schema -> typespec draft -> same IR, and back', () => {
   const draft = renderTypeSpec(js(), 'note');
   assert.equal(canonical(parseTypeSpec(draft)), canonical(js()));
