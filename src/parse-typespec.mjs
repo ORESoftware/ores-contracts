@@ -18,6 +18,9 @@ const FIELD_DECORATORS = new Set([
   'Ores.references', 'references',
   'maxLength', 'TypeSpec.maxLength',
   'doc', 'TypeSpec.doc',
+  // Reviewed wire-only TypeSpec JSON Schema extension. TJSV owns its semantics;
+  // persistence projection merely permits it to coexist with persisted fields.
+  'TypeSpec.JsonSchema.extension',
 ]);
 
 function stripComments(source, where) {
