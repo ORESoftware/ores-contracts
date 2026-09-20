@@ -4,7 +4,10 @@
     "kind": "tjsv-contract-ir",
     "requireCompleteScope": true
   },
-  "requiredDeclarations": [],
+  "declarationSelection": {
+    "mode": "all-admitted",
+    "include": []
+  },
   "targets": [
     {
       "language": "rust",
