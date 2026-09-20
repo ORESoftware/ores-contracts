@@ -14,6 +14,18 @@ test('polyglot header profile schema stays fail-closed', () => {
   assert.equal(schema.properties.source.properties.requireCompleteScope.const, true);
   assert.equal(schema.additionalProperties, false);
   assert.equal(schema.properties.source.additionalProperties, false);
+  assert.equal(schema.properties.declarationSelection.additionalProperties, false);
+  assert.deepEqual(schema.properties.declarationSelection.properties.mode.enum, ['all-admitted', 'explicit']);
+  assert.equal(
+    schema.properties.declarationSelection.allOf[0].then.properties.include.maxItems,
+    0,
+    'all-admitted selection must not carry an explicit include list',
+  );
+  assert.equal(
+    schema.properties.declarationSelection.allOf[1].then.properties.include.minItems,
+    1,
+    'explicit selection must name at least one declaration',
+  );
   assert.equal(schema.properties.targets.items.additionalProperties, false);
   assert.equal(schema.properties.conformance.additionalProperties, false);
   assert.equal(schema.properties.conformance.properties.requireCleanRegeneration.const, true);
@@ -24,7 +36,7 @@ test('default polyglot header matrix requires the four compile-surface consumers
   const profile = readJson('templates/polyglot-headers/conformance/polyglot-headers.v1.json');
   assert.equal(profile.schema, 'ores.polyglot-header-profile/v1');
   assert.deepEqual(profile.source, { kind: 'tjsv-contract-ir', requireCompleteScope: true });
-  assert.deepEqual(profile.requiredDeclarations, []);
+  assert.deepEqual(profile.declarationSelection, { mode: 'all-admitted', include: [] });
 
   const targets = new Map(profile.targets.map((target) => [target.language, target]));
   assert.equal(targets.size, profile.targets.length, 'duplicate target language');
