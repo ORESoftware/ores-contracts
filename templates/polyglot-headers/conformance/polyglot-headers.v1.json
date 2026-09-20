@@ -1,0 +1,40 @@
+{
+  "schema": "ores.polyglot-header-profile/v1",
+  "source": {
+    "kind": "tjsv-contract-ir",
+    "requireCompleteScope": true
+  },
+  "requiredDeclarations": [],
+  "targets": [
+    {
+      "language": "rust",
+      "mode": "compile-surface",
+      "externalConsumer": true,
+      "implementationCrossCheck": true
+    },
+    {
+      "language": "typescript",
+      "mode": "compile-surface",
+      "externalConsumer": true,
+      "implementationCrossCheck": true
+    },
+    {
+      "language": "go",
+      "mode": "compile-surface",
+      "externalConsumer": true,
+      "implementationCrossCheck": true
+    },
+    {
+      "language": "dart",
+      "mode": "compile-surface",
+      "externalConsumer": true,
+      "implementationCrossCheck": true
+    }
+  ],
+  "conformance": {
+    "requireCleanRegeneration": true,
+    "requireOutputManifest": true,
+    "requireCompileChecks": true,
+    "requireFixtureChecks": true
+  }
+}
