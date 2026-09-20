@@ -3,7 +3,7 @@
   "$id": "https://schemas.oresoftware.com/contracts/polyglot-header-profile.v1.schema.json",
   "title": "ORES polyglot header projection profile v1",
   "type": "object",
-  "required": ["schema", "source", "requiredDeclarations", "targets", "conformance"],
+  "required": ["schema", "source", "declarationSelection", "targets", "conformance"],
   "properties": {
     "schema": { "const": "ores.polyglot-header-profile/v1" },
     "source": {
@@ -15,10 +15,28 @@
       },
       "additionalProperties": false
     },
-    "requiredDeclarations": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
+    "declarationSelection": {
+      "type": "object",
+      "required": ["mode", "include"],
+      "properties": {
+        "mode": { "enum": ["all-admitted", "explicit"] },
+        "include": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "all-admitted" } }, "required": ["mode"] },
+          "then": { "properties": { "include": { "maxItems": 0 } } }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "explicit" } }, "required": ["mode"] },
+          "then": { "properties": { "include": { "minItems": 1 } } }
+        }
+      ],
+      "additionalProperties": false
     },
     "targets": {
       "type": "array",
