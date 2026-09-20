@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/contracts/polyglot-header-profile.v1.schema.json",
+  "title": "ORES polyglot header projection profile v1",
+  "type": "object",
+  "required": ["schema", "source", "requiredDeclarations", "targets", "conformance"],
+  "properties": {
+    "schema": { "const": "ores.polyglot-header-profile/v1" },
+    "source": {
+      "type": "object",
+      "required": ["kind", "requireCompleteScope"],
+      "properties": {
+        "kind": { "const": "tjsv-contract-ir" },
+        "requireCompleteScope": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "requiredDeclarations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["language", "mode", "externalConsumer", "implementationCrossCheck"],
+        "properties": {
+          "language": {
+            "enum": [
+              "rust", "typescript", "go", "dart", "python", "java", "kotlin",
+              "csharp", "swift", "c", "cpp", "gleam", "wit", "protobuf"
+            ]
+          },
+          "mode": { "enum": ["compile-surface", "declaration-only", "wire-only"] },
+          "externalConsumer": { "type": "boolean" },
+          "implementationCrossCheck": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "conformance": {
+      "type": "object",
+      "required": ["requireCleanRegeneration", "requireOutputManifest", "requireCompileChecks", "requireFixtureChecks"],
+      "properties": {
+        "requireCleanRegeneration": { "const": true },
+        "requireOutputManifest": { "const": true },
+        "requireCompileChecks": { "type": "boolean" },
+        "requireFixtureChecks": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
