@@ -7,3 +7,10 @@ When this repository owns structured interfaces, keep independently authored Typ
 Polyglot header files are downstream projections, not authorities. A repository may keep a `polyglot-header-profile.json` here to describe how an already-admitted Contract IR is projected, but generated Rust/TypeScript/Go/Dart/etc. headers belong under `generated/` and their executable proof belongs under `conformance/`. See `docs/polyglot-headers.md`.
 
 Do not invent a contract merely to populate this directory; add package-specific authorities here only when this repository actually owns them.
+
+## Provider benchmark receipts
+
+The shared provider-neutral performance/cost comparison authority is documented
+in [docs/provider-benchmark.md](../docs/provider-benchmark.md) and expressed by
+`provider-benchmark-*.schema.json` plus the independent TypeSpec peer authority
+at `typespec/provider-benchmark.tsp`.
