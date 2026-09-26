@@ -1,0 +1,24 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://oresoftware.dev/schemas/provider-benchmark-aggregate-receipt-v1.schema.json",
+  "type":"object","additionalProperties":false,
+  "required":["schema","planSha256","releaseId","requestCorpusSha256","pricingSnapshot","comparable","comparabilityIssues","targets"],
+  "properties":{
+    "schema":{"const":"ores.provider-benchmark.aggregate-receipt/v1"},
+    "planSha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "releaseId":{"type":"string","minLength":1},
+    "requestCorpusSha256":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "pricingSnapshot":{
+      "type":"object","additionalProperties":false,
+      "required":["asOf","currency","source"],
+      "properties":{
+        "asOf":{"type":"string","minLength":1},
+        "currency":{"type":"string","pattern":"^[A-Z]{3}$"},
+        "source":{"type":"string","minLength":1}
+      }
+    },
+    "comparable":{"type":"boolean"},
+    "comparabilityIssues":{"type":"array","items":{"type":"string"}},
+    "targets":{"type":"array","minItems":1,"items":{"$ref":"provider-benchmark-target-receipt.schema.json"}}
+  }
+}
