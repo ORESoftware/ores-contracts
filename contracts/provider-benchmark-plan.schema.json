@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oresoftware.dev/schemas/provider-benchmark-plan-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema","releaseId","requestCorpusSha256","pricingSnapshot","targets"],
+  "properties": {
+    "schema": {"const":"ores.provider-benchmark.plan/v1"},
+    "releaseId": {"type":"string","minLength":1},
+    "requestCorpusSha256": {"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "pricingSnapshot": {
+      "type":"object","additionalProperties":false,
+      "required":["asOf","currency","source"],
+      "properties":{
+        "asOf":{"type":"string","minLength":1},
+        "currency":{"type":"string","pattern":"^[A-Z]{3}$"},
+        "source":{"type":"string","minLength":1}
+      }
+    },
+    "targets": {
+      "type":"array","minItems":1,
+      "items":{
+        "type":"object","additionalProperties":false,
+        "required":["id","provider","region","artifactReceipts","resourceProfile","run","receipt"],
+        "properties":{
+          "id":{"type":"string","pattern":"^[a-z][a-z0-9_-]{0,62}$"},
+          "provider":{"type":"string","minLength":1},
+          "region":{"type":"string","minLength":1},
+          "artifactReceipts":{"type":"object","minProperties":1,"additionalProperties":{"type":"string","pattern":"^[a-f0-9]{64}$"}},
+          "resourceProfile":{
+            "type":"object","additionalProperties":false,"required":["architecture"],
+            "properties":{
+              "architecture":{"type":"string","minLength":1},
+              "memoryMb":{"type":"integer","minimum":1},
+              "cpuMillis":{"type":"integer","minimum":1},
+              "concurrency":{"type":"integer","minimum":1},
+              "mode":{"type":"string","minLength":1}
+            }
+          },
+          "run":{
+            "type":"object","additionalProperties":false,"required":["argv"],
+            "properties":{
+              "cwd":{"type":"string","minLength":1},
+              "argv":{"type":"array","minItems":1,"items":{"type":"string"}},
+              "inheritEnv":{"type":"array","uniqueItems":true,"items":{"type":"string","pattern":"^[A-Za-z_][A-Za-z0-9_]*$"}}
+            }
+          },
+          "receipt":{"type":"string","minLength":1}
+        }
+      }
+    }
+  }
+}
