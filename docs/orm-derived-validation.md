@@ -1,49 +1,37 @@
 # ORM-derived validation projections
 
-This is the Rust equivalent of a `drizzle-zod` witness lane, with one important authority boundary: Diesel/SeaORM definitions are **derivative persistence evidence**, not a replacement for independently authored TypeSpec + JSON Schema.
+ORM-first Diesel/SeaORM parsing and derivative validation generation is owned by [`ORESoftware/ores-orm-core`](https://github.com/ORESoftware/ores-orm-core).
 
-`ores-orm-derive` reads the committed Diesel `table!` schema and SeaORM `DeriveEntityModel` source, normalizes both, and fails closed unless table/column/type/nullability/array/primary-key shape agrees. SeaORM `DeriveActiveEnum` metadata supplies enum values that Diesel's table schema cannot recover.
+`ores-contracts` remains the **contract-first persistence convergence** engine:
 
-A public projection is never implicit. The policy file must explicitly allowlist every model and field that may leave `*-orm-core`. This prevents accidental publication of password hashes, tenancy columns, internal audit fields, soft-delete markers, secrets, or backend-only identifiers.
-
-Example policy:
-
-```json
-{
-  "source_namespace": "acme.persistence",
-  "namespace": "acme.public.persistence",
-  "models": {
-    "User": {
-      "name": "UserPublic",
-      "fields": ["id", "email", "display_name", "status"]
-    }
-  }
-}
+```text
+human TypeSpec ---------> persistence IR_T -----> SQL / SeaORM / Diesel / language witnesses
+human JSON Schema -----> persistence IR_J -----> SQL / SeaORM / Diesel / language witnesses
+                              |                         |
+                              +---- convergence --------+
 ```
 
-Run from a private `*-orm-core` repository:
+The inverse lane is deliberately separate:
 
-```sh
-ores-orm-derive \
-  --diesel generated/diesel/schema.rs \
-  --seaorm generated/seaorm/entities.rs \
-  --policy orm-derived.public.json \
-  --out generated/orm-derived
+```text
+Diesel witness ----\
+                    +----> ORESoftware/ores-orm-core ----> private derivative DTOs/validators
+SeaORM witness ----/                         |
+                                             +----> public candidates
+                                                        |
+                                           TJSV Contract IR admission
 ```
 
-Outputs are deterministic witnesses:
+## Authority boundary
 
-- Draft 2020-12 JSON Schema
-- plain Rust Serde DTOs with `deny_unknown_fields`
-- TypeScript Zod schemas/types
-- Dart runtime validators
-- Gleam decoders/types
-- normalized ORM projection + SHA-256 receipt
+- Human-authored TypeSpec and Draft 2020-12 JSON Schema remain independent peer authorities.
+- `typespec-json-schema-validator` owns generic semantic parity, Contract IR identity, current-input verification, and public projection admission decisions.
+- `ores-contracts` owns contract-first persistence convergence for the supported persistence subset.
+- `ores-orm-core` owns ORM-first Diesel/SeaORM normalization, convergence, derivative shapes, and Rust/TypeScript/Dart/Gleam/JSON-Schema candidate generation.
+- `ores-wit` owns WIT syntax/canonicalization/binding orchestration downstream of admitted Contract IR.
 
-Promotion rule: only promote artifacts after the generated JSON Schema / language artifacts are admitted against the current TypeSpec + authored JSON Schema Contract IR using `typespec-json-schema-validator` language-boundary/projection evidence.
+Do not copy ORM parsers or ORM-first language emitters into this repository. Doing so creates two definitions of Diesel/SeaORM semantics and allows the implementations to drift.
 
-- server-only admitted derivative DTOs/validators may be consumed by `*-lib-core`;
-- client-safe/public admitted DTOs/validators belong in `*-pub-lib-core`, `*-clients`, or language SDK packages;
-- none of those packages imports executable `*-orm-core` code.
+Public ORM-derived candidates are **not** publishable merely because Contract IR or receipt bytes were attached or hashed. They remain blocked until the owning TJSV admission flow verifies the exact current Contract IR, receipt, source digests, and projection evidence.
 
-`ores-wit` may then consume the same admitted Contract IR for WIT/bindgen projections; ORM source must not bypass TJSV and become a WIT authority.
+See the `ORESoftware/ores-orm-core` README and `ORESoftware/orm-core-template.rs` for repository-family integration.
