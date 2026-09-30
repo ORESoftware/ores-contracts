@@ -1,7 +1,7 @@
 {
   "name": "@oresoftware/ores-contracts",
   "version": "0.1.1",
-  "description": "Independent TypeSpec and JSON Schema authorities → parity-checked SQL, SeaORM, Diesel, Rust, TypeScript, Dart and Gleam artifacts, plus ORM-derived validation witnesses.",
+  "description": "Independent TypeSpec and JSON Schema authorities → parity-checked persistence/codegen witnesses. ORM-first derivative codegen is owned by ORESoftware/ores-orm-core; the ores-orm-derive bin is legacy bootstrap-only.",
   "type": "module",
   "license": "MIT",
   "bin": {
