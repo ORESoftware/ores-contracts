@@ -48,3 +48,25 @@ test('dual-ORM evidence names both adapters and pins an immutable revision', () 
   assert.deepEqual(example.source.orm, ['seaorm', 'diesel']);
   assert.match(example.source.revision, /^[0-9a-f]{40}$/);
 });
+
+
+test('descriptor scalar vocabulary covers the Rust ORM IR scalar domain', () => {
+  const kinds = new Set(schema.$defs.type.properties.kind.enum);
+  for (const kind of [
+    'boolean',
+    'int16',
+    'int32',
+    'int64',
+    'float32',
+    'float64',
+    'decimal',
+    'string',
+    'uuid',
+    'plainDate',
+    'utcDateTime',
+    'bytes',
+    'json',
+  ]) {
+    assert.ok(kinds.has(kind), `missing descriptor scalar ${kind}`);
+  }
+});
