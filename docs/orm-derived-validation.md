@@ -40,4 +40,10 @@ Outputs are deterministic witnesses:
 - Gleam decoders/types
 - normalized ORM projection + SHA-256 receipt
 
-Promotion rule: copy/publish these artifacts into `*-lib-core`, `*-clients`, or SDK packages only after the generated JSON Schema / language artifacts are admitted against the current TypeSpec + authored JSON Schema Contract IR using `typespec-json-schema-validator` language-boundary/projection evidence. `ores-wit` may then consume the same admitted Contract IR for WIT/bindgen projections; ORM source must not bypass TJSV and become a WIT authority.
+Promotion rule: only promote artifacts after the generated JSON Schema / language artifacts are admitted against the current TypeSpec + authored JSON Schema Contract IR using `typespec-json-schema-validator` language-boundary/projection evidence.
+
+- server-only admitted derivative DTOs/validators may be consumed by `*-lib-core`;
+- client-safe/public admitted DTOs/validators belong in `*-pub-lib-core`, `*-clients`, or language SDK packages;
+- none of those packages imports executable `*-orm-core` code.
+
+`ores-wit` may then consume the same admitted Contract IR for WIT/bindgen projections; ORM source must not bypass TJSV and become a WIT authority.
