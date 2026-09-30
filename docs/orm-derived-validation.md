@@ -1,49 +1,59 @@
 # ORM-derived validation projections
 
-This is the Rust equivalent of a `drizzle-zod` witness lane, with one important authority boundary: Diesel/SeaORM definitions are **derivative persistence evidence**, not a replacement for independently authored TypeSpec + JSON Schema.
+The canonical inverse/code-first ORM derivative engine now lives in **`ORESoftware/ores-orm-core`** and is Rust-first. Diesel/SeaORM definitions are derivative persistence evidence, not a replacement for independently authored TypeSpec + JSON Schema.
 
-`ores-orm-derive` reads the committed Diesel `table!` schema and SeaORM `DeriveEntityModel` source, normalizes both, and fails closed unless table/column/type/nullability/array/primary-key shape agrees. SeaORM `DeriveActiveEnum` metadata supplies enum values that Diesel's table schema cannot recover.
+`ORESoftware/ores-contracts` continues to own the contract-first persistence convergence lane: independently authored TypeSpec and JSON Schema are parsed separately, must converge, and may emit SQL/SeaORM/Diesel/language witnesses. It must not also evolve a competing long-term ORM parser/emitter stack.
 
-A public projection is never implicit. The policy file must explicitly allowlist every model and field that may leave `*-orm-core`. This prevents accidental publication of password hashes, tenancy columns, internal audit fields, soft-delete markers, secrets, or backend-only identifiers.
+## Legacy Node compatibility shim
 
-Example policy:
+The historical `ores-orm-derive` executable remains temporarily for bootstrap inspection by repositories that have not yet migrated to the Rust engine. It is **not** a release or publication generator.
+
+Direct argv parsing has been removed from that shim. It runs only when explicitly opted into with `ORES_ORM_LEGACY_BOOTSTRAP=1` and receives its paths through environment variables:
+
+```sh
+ORES_ORM_LEGACY_BOOTSTRAP=1 \
+ORES_ORM_DIESEL=generated/diesel/schema.rs \
+ORES_ORM_SEAORM=generated/seaorm/entities.rs \
+ORES_ORM_POLICY=orm-derived.public.json \
+ORES_ORM_OUT=generated/orm-derived-bootstrap \
+ores-orm-derive
+```
+
+Every legacy receipt is stamped:
 
 ```json
 {
-  "source_namespace": "acme.persistence",
-  "namespace": "acme.public.persistence",
-  "models": {
-    "User": {
-      "name": "UserPublic",
-      "fields": ["id", "email", "display_name", "status"]
-    }
-  }
+  "role": "legacy_bootstrap_evidence_only",
+  "publication": "blocked_pending_rust_engine_and_tjsv_admission",
+  "publishable": false
 }
 ```
 
-Run from a private `*-orm-core` repository:
+The shim also writes `DO_NOT_PUBLISH.md`. Its output must not be copied into `*-lib-core`, `*-pub-lib-core`, `*-clients`, SDKs, WIT packages, or releases.
 
-```sh
-ores-orm-derive \
-  --diesel generated/diesel/schema.rs \
-  --seaorm generated/seaorm/entities.rs \
-  --policy orm-derived.public.json \
-  --out generated/orm-derived
+## Canonical release flow
+
+```text
+Diesel --------------------\
+                            +--> ORESoftware/ores-orm-core
+SeaORM --------------------/         |
+                                      +--> converged ORM IR
+                                      +--> exact policy-derived shape
+                                      +--> Rust / TS-Zod / Dart / Gleam / JSON Schema
+                                      +--> provenance manifest
+                                                   |
+                                                   v
+TypeSpec authority --------\                 TJSV admission
+                             +--------------->     |
+JSON Schema authority ------/                      v
+                                          admitted derivative
 ```
 
-Outputs are deterministic witnesses:
+The Rust engine preserves row/create/update/patch presence separately from SQL nullability, fail-closes on ambiguous cross-runtime scalar mappings, binds generated artifacts to the exact converged ORM IR + policy-derived shape, and keeps public candidates blocked until a separate TJSV admission step succeeds.
 
-- Draft 2020-12 JSON Schema
-- plain Rust Serde DTOs with `deny_unknown_fields`
-- TypeScript Zod schemas/types
-- Dart runtime validators
-- Gleam decoders/types
-- normalized ORM projection + SHA-256 receipt
+After admission:
 
-Promotion rule: only promote artifacts after the generated JSON Schema / language artifacts are admitted against the current TypeSpec + authored JSON Schema Contract IR using `typespec-json-schema-validator` language-boundary/projection evidence.
-
-- server-only admitted derivative DTOs/validators may be consumed by `*-lib-core`;
+- server-only derivative DTOs/validators may be consumed by `*-lib-core`;
 - client-safe/public admitted DTOs/validators belong in `*-pub-lib-core`, `*-clients`, or language SDK packages;
-- none of those packages imports executable `*-orm-core` code.
-
-`ores-wit` may then consume the same admitted Contract IR for WIT/bindgen projections; ORM source must not bypass TJSV and become a WIT authority.
+- none of those packages imports executable `*-orm-core` code;
+- `ores-wit` consumes the same admitted Contract IR rather than treating ORM definitions as authority.
