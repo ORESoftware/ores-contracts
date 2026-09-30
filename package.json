@@ -1,18 +1,14 @@
 {
   "name": "@oresoftware/ores-contracts",
   "version": "0.1.1",
-  "description": "Independent TypeSpec and JSON Schema authorities → parity-checked SQL, SeaORM, Diesel, Rust, TypeScript, Dart and Gleam artifacts, plus ORM-derived validation witnesses.",
+  "description": "Independent TypeSpec and JSON Schema authorities → parity-checked SQL, SeaORM, Diesel, Rust, TypeScript, Dart and Gleam artifacts.",
   "type": "module",
   "license": "MIT",
-  "bin": {
-    "ores-contracts": "bin/ores-contracts.mjs",
-    "ores-orm-derive": "bin/ores-orm-derive.mjs"
-  },
+  "bin": { "ores-contracts": "bin/ores-contracts.mjs" },
   "exports": {
     ".": "./src/cli.mjs",
     "./ir": "./src/ir.mjs",
     "./emit": "./src/emit/index.mjs",
-    "./orm-derived": "./src/orm-derived/index.mjs",
     "./tjsv-admission": "./src/tjsv-admission.mjs"
   },
   "scripts": { "test": "node --test test/*.test.mjs", "check": "node src/cli.mjs check --config test/fixtures/contracts.config.json" },
