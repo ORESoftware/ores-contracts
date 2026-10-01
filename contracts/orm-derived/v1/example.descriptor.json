@@ -1,0 +1,94 @@
+{
+  "schema": "ores.orm-descriptor/v1",
+  "source": {
+    "repository": "example-org/example-orm-core",
+    "revision": "0123456789abcdef0123456789abcdef01234567",
+    "crate": "example-orm-core",
+    "toolchain": "rustc 1.88.0",
+    "orm": ["seaorm", "diesel"]
+  },
+  "model": {
+    "namespace": "Example.Accounts",
+    "name": "AccountRow",
+    "table": "accounts",
+    "publicSurface": true,
+    "fields": [
+      {
+        "name": "id",
+        "wireName": "id",
+        "databaseName": "id",
+        "type": { "kind": "uuid", "array": false },
+        "nullable": false,
+        "generated": true,
+        "defaulted": true,
+        "selectable": true,
+        "insertable": false,
+        "updatable": false,
+        "visibility": "public"
+      },
+      {
+        "name": "email",
+        "wireName": "email",
+        "databaseName": "email",
+        "type": { "kind": "string", "array": false },
+        "nullable": false,
+        "generated": false,
+        "defaulted": false,
+        "selectable": true,
+        "insertable": true,
+        "updatable": true,
+        "visibility": "public",
+        "constraints": {
+          "minLength": 3,
+          "maxLength": 320,
+          "format": "email"
+        }
+      },
+      {
+        "name": "password_hash",
+        "wireName": "passwordHash",
+        "databaseName": "password_hash",
+        "type": { "kind": "string", "array": false },
+        "nullable": false,
+        "generated": false,
+        "defaulted": false,
+        "selectable": true,
+        "insertable": true,
+        "updatable": true,
+        "visibility": "secret"
+      },
+      {
+        "name": "status",
+        "wireName": "status",
+        "databaseName": "status",
+        "type": {
+          "kind": "enum",
+          "name": "AccountStatus",
+          "array": false,
+          "enumValues": ["active", "disabled"]
+        },
+        "nullable": false,
+        "generated": false,
+        "defaulted": true,
+        "selectable": true,
+        "insertable": true,
+        "updatable": true,
+        "visibility": "public"
+      },
+      {
+        "name": "created_at",
+        "wireName": "createdAt",
+        "databaseName": "created_at",
+        "type": { "kind": "utcDateTime", "array": false },
+        "nullable": false,
+        "generated": true,
+        "defaulted": true,
+        "selectable": true,
+        "insertable": false,
+        "updatable": false,
+        "visibility": "private"
+      }
+    ],
+    "relations": []
+  }
+}

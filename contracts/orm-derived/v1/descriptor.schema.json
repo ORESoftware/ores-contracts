@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ORESoftware/ores-contracts/raw/main/contracts/orm-derived/v1/descriptor.schema.json",
+  "title": "ORES ORM derivative descriptor v1",
+  "$comment": "Generated evidence emitted from a reviewed ORM boundary. This document is not an authored contract authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "source",
+    "model"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.orm-descriptor/v1"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "revision",
+        "crate",
+        "toolchain",
+        "orm"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "crate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolchain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "orm": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "seaorm",
+              "diesel"
+            ]
+          }
+        }
+      }
+    },
+    "model": {
+      "$ref": "#/$defs/model"
+    }
+  },
+  "$defs": {
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "name",
+        "table",
+        "publicSurface",
+        "fields"
+      ],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "table": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publicSurface": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/relation"
+          }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "wireName",
+        "databaseName",
+        "type",
+        "nullable",
+        "generated",
+        "defaulted",
+        "selectable",
+        "insertable",
+        "updatable",
+        "visibility"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wireName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "databaseName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "previousWireNames": {
+          "type": "array",
+          "uniqueItems": true,
+          "default": [],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "previousDatabaseNames": {
+          "type": "array",
+          "uniqueItems": true,
+          "default": [],
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "generated": {
+          "type": "boolean"
+        },
+        "defaulted": {
+          "type": "boolean"
+        },
+        "selectable": {
+          "type": "boolean"
+        },
+        "insertable": {
+          "type": "boolean"
+        },
+        "updatable": {
+          "type": "boolean"
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private",
+            "secret",
+            "unclassified"
+          ]
+        },
+        "constraints": {
+          "$ref": "#/$defs/constraints"
+        }
+      }
+    },
+    "type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "array"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "boolean",
+            "bytes",
+            "decimal",
+            "enum",
+            "float32",
+            "float64",
+            "int16",
+            "int32",
+            "int64",
+            "json",
+            "plainDate",
+            "string",
+            "utcDateTime",
+            "uuid"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "array": {
+          "type": "boolean"
+        },
+        "enumValues": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "enum"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "name",
+              "enumValues"
+            ]
+          }
+        }
+      ]
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "targetModel",
+        "targetField"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetField": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
