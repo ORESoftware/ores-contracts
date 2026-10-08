@@ -1,0 +1,55 @@
+name: representation-review peer authority
+on:
+  pull_request:
+    paths:
+      - "contracts/implementation-deviation-review/**"
+      - ".github/workflows/representation-review.yml"
+  push:
+    branches: [main]
+    paths:
+      - "contracts/implementation-deviation-review/**"
+      - ".github/workflows/representation-review.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact candidate revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Check independent review contract authorities
+        uses: ORESoftware/typespec-json-schema-validator@a433a3e6c79a95986320d1d875a066b7e30d9420
+        with:
+          typespec: contracts/implementation-deviation-review/main.tsp
+          schema: contracts/implementation-deviation-review/authored.schema.json
+          mapping: contracts/implementation-deviation-review/tjsv.mapping.json
+          report: .typespec-json-schema-validator/review/report.json
+          contract_ir: .typespec-json-schema-validator/review/contract-ir.json
+          output_dir: .typespec-json-schema-validator/review/generated
+          max_probes: "128"
+      - name: Block partial, ignored or incompatible review authorities
+        run: |
+          set -euo pipefail
+          jq -e '
+            .status == "passed" and .zeroUnexplainedFindings == true and
+            (.findings | length) == 0 and
+            .authorities.precedence == "none" and
+            (.differential.summary.probesEvaluated // 0) > 0 and
+            (.differential.summary.divergences // -1) == 0 and
+            (.differential.summary.refusals // -1) == 0
+          ' .typespec-json-schema-validator/review/report.json
+          jq -e '.status == "passed" and .admissible == true and .editableAuthority == false' .typespec-json-schema-validator/review/contract-ir.json
+          jq -e '
+            (.declarations | length) == 1 and
+            .ignore.typespec == [] and .ignore.generated == [] and .ignore.authored == []
+          ' contracts/implementation-deviation-review/tjsv.mapping.json
+          git diff --exit-code -- contracts/implementation-deviation-review/
