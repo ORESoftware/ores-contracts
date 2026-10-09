@@ -45,7 +45,8 @@ export function assertNonWaiverReviewContract(schema) {
   }
   if (model.properties.source_revision?.pattern !== '^[a-f0-9]{40}$'
       || model.properties.contract_ir_digest?.pattern !== '^sha256:[a-f0-9]{64}$'
-      || model.properties.reason?.minLength < 32
+      || !Number.isSafeInteger(model.properties.reason?.minLength)
+      || model.properties.reason.minLength < 32
       || model.properties.tracking_issue?.pattern
         !== '^https://github[.]com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+/issues/[1-9][0-9]*$') {
     throw new Error('source binding, reviewed issue, or rationale requirements have weakened');
