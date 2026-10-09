@@ -3,11 +3,15 @@ on:
   pull_request:
     paths:
       - "contracts/implementation-deviation-review/**"
+      - "scripts/assert-deviation-non-waiver.mjs"
+      - "test/deviation-review-policy.test.mjs"
       - ".github/workflows/representation-review.yml"
   push:
     branches: [main]
     paths:
       - "contracts/implementation-deviation-review/**"
+      - "scripts/assert-deviation-non-waiver.mjs"
+      - "test/deviation-review-policy.test.mjs"
       - ".github/workflows/representation-review.yml"
   workflow_dispatch:
 permissions:
@@ -36,6 +40,10 @@ jobs:
           contract_ir: .typespec-json-schema-validator/review/contract-ir.json
           output_dir: .typespec-json-schema-validator/review/generated
           max_probes: "128"
+      - name: Prove annotations and review documents cannot become conformance waivers
+        run: |
+          node scripts/assert-deviation-non-waiver.mjs
+          node --test test/deviation-review-policy.test.mjs
       - name: Block partial, ignored or incompatible review authorities
         run: |
           set -euo pipefail
