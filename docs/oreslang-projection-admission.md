@@ -23,3 +23,14 @@ Repository invariant: Do not add an Oreslang emitter to deterministic persistenc
 - [ ] Separately tested JS and Wasm browser backends (future only)
 
 No authored TypeSpec/JSON Schema or generated artifact is changed in this PR. This checklist is a blocker ledger, not a claim of passing CI.
+
+## Source-current browser/JS/Wasm alignment (audit baseline 2026-10-11)
+
+- Java/GraalVM reference compiler: `ores-truffle-oreslang/oreslang-source.java@a69035665047b4007ef3058cb4bd59aca8a8b8d1` (verified `main` audit snapshot, not a floating compatibility claim).
+- Wasm infrastructure: `oreslang-wasm@0691ddcb5e66d5c54a73ed5da4e26e554098b980`; browser loader: `oreslang-browser@3944cc8b10c4fd688e3bec9f533090454d810a22`.
+- Target admission and test tools: `oreslang-target-profiles@c0975d7b286eeaa4cc7aab3b0745224130d74a8f`, `oreslang-platform-conformance@b6c5a112a509a8d56479cc802b4c6d72e05fbebf`.
+- These are **separate backends/tools**, not proof of complete source-to-JavaScript transpilation or complete Oreslang source-to-Wasm support. The Wasm runtime/loader and native compiler bridge are partial; execute each real compiler backend and browser host before admission. A Rust-Wasm adapter passing does not certify Oreslang-Wasm.
+- Maintain source-language semantics and behavior across Java/GraalVM and the JS/Wasm targets: typed public ABI, consistent event/error outcomes, owned/borrowed value lifetimes, cancellation, scheduler fairness, byte-exact serialization, resource bounds, and explicit host capability grants. Use the same immutable positive/negative fixtures and contract receipts, and label unsupported operations as hard failures.
+- Neither a browser-target profile nor a WIT/JS stub establishes frontend support. Every release must re-verify the then-current pinned compiler SHA and exact compiled guest artifact hash; never infer it from moving `main`.
+
+Browser/client lane: project TypeSpec/JSON Schema-verified Oreslang types, pure validators and codecs into JavaScript and Wasm consumers only after TJSV Contract IR binding. SQL/SeaORM/Diesel generation, secret credentials, storage and canonical release authority stay host/server-side. A TypeScript declaration file or WIT signature alone is neither Oreslang JS/Wasm implementation nor runtime validation.
