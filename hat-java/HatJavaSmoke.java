@@ -38,6 +38,20 @@ public final class HatJavaSmoke {
         if (HatCpuReferenceExecutor.execute(shakenKernel, 20L, 22L) != 42L)
             throw new AssertionError("tree-shaken kernel changed semantics");
 
+        boolean publicEntryRejected = false;
+        try {
+            HatKernelCompiler.compile(Parser.parse("""
+                    define pub kernel BadVisibility as
+                      pub fnc main(int value): int {
+                        return value;
+                      }
+                    end
+                    """));
+        } catch (IllegalArgumentException expected) {
+            publicEntryRejected = true;
+        }
+        if (!publicEntryRejected) throw new AssertionError("public kernel entry was admitted");
+
         boolean floatRejected = false;
         try {
             HatKernelCompiler.compile(Parser.parse("""
