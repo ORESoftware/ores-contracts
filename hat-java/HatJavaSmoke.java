@@ -1,7 +1,11 @@
+import dev.oreslang.compiler.BuildOptions;
+import dev.oreslang.compiler.TreeShaker;
 import dev.oreslang.hat.HatCpuReferenceExecutor;
 import dev.oreslang.hat.HatKernelCompiler;
 import dev.oreslang.hat.HatKernelIr;
 import dev.oreslang.parser.Parser;
+
+import java.util.Map;
 
 public final class HatJavaSmoke {
     public static void main(String[] args) {
@@ -21,6 +25,18 @@ public final class HatJavaSmoke {
         if (!canonical.contains("ADD_I64(arg(0:left:I64),arg(1:right:I64))"))
             throw new AssertionError(canonical);
         if (HatKernelIr.sha256(kernel).length() != 64) throw new AssertionError("bad digest");
+
+        var shaken = TreeShaker.shake(program, BuildOptions.library(Map.of()));
+        if (!shaken.retained("__root__.Add")) throw new AssertionError("public kernel was tree-shaken");
+        if (shaken.program().modules().size() != 1
+                || shaken.program().modules().getFirst().declarations().size() != 1
+                || !(shaken.program().modules().getFirst().declarations().getFirst()
+                     instanceof dev.oreslang.ast.Ast.KernelDecl)) {
+            throw new AssertionError("kernel artifact missing after tree shaking");
+        }
+        var shakenKernel = HatKernelCompiler.compile(shaken.program()).getFirst();
+        if (HatCpuReferenceExecutor.execute(shakenKernel, 20L, 22L) != 42L)
+            throw new AssertionError("tree-shaken kernel changed semantics");
 
         boolean rejected = false;
         try {
