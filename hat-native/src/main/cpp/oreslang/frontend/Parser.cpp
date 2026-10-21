@@ -349,6 +349,8 @@ private:
         require("end");
 
         const Function& entry = kernel.entry;
+        if (entry.exported)
+            fail("HAT v1 kernel main is internal; visibility belongs on the kernel declaration");
         if (entry.name != "main")
             fail("HAT v1 kernel entry must be named main");
         if (entry.returns_void)
