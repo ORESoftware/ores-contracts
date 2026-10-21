@@ -38,6 +38,20 @@ public final class HatJavaSmoke {
         if (HatCpuReferenceExecutor.execute(shakenKernel, 20L, 22L) != 42L)
             throw new AssertionError("tree-shaken kernel changed semantics");
 
+        boolean floatRejected = false;
+        try {
+            HatKernelCompiler.compile(Parser.parse("""
+                    define kernel BadFloat as
+                      fnc main(): int {
+                        return 1.0;
+                      }
+                    end
+                    """));
+        } catch (IllegalArgumentException expected) {
+            floatRejected = true;
+        }
+        if (!floatRejected) throw new AssertionError("float literal was admitted into i64 HAT v1");
+
         boolean rejected = false;
         try {
             HatKernelCompiler.compile(Parser.parse("""
