@@ -50,6 +50,10 @@ public final class HatKernelCompiler {
             throw new IllegalArgumentException(
                     "HAT v1 kernel '" + kernel.name() + "' entry must be named main");
         }
+        if (entry.visibility() != Ast.Visibility.PRIVATE) {
+            throw new IllegalArgumentException(
+                    "HAT v1 kernel main is internal; visibility belongs on the kernel declaration");
+        }
         if (entry.kind() != Ast.CallableKind.FNC
                 || entry.actorKind() != Ast.ActorKind.NONE
                 || entry.async() || entry.suspends() || entry.generator()
