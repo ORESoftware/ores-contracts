@@ -1,0 +1,23 @@
+name: Oreslang HAT Java smoke
+on:
+  push:
+    branches:
+      - ci/oreslang-hat-java-2211bd72
+jobs:
+  hat-java:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Compile and run HAT v1 parser/IR slice
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/hat-java
+          find hat-java/src/main/java -name '*.java' > /tmp/hat-java-sources.txt
+          echo hat-java/HatJavaSmoke.java >> /tmp/hat-java-sources.txt
+          javac --release 25 -d /tmp/hat-java @/tmp/hat-java-sources.txt
+          java -ea -cp /tmp/hat-java HatJavaSmoke
