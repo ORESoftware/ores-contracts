@@ -1,0 +1,21 @@
+name: Oreslang HAT native smoke
+on:
+  push:
+    branches:
+      - ci/oreslang-hat-native-3e18c2b3
+jobs:
+  hat-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run HAT v1 parser/IR slice
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -UNDEBUG \
+            -Ihat-native/src/main/cpp \
+            hat-native/tests/hat_kernel_ir_test.cpp \
+            hat-native/src/main/cpp/oreslang/frontend/Parser.cpp \
+            hat-native/src/main/cpp/oreslang/types/OwnershipChecker.cpp \
+            -o /tmp/oreslang-hat-native-test
+          /tmp/oreslang-hat-native-test
