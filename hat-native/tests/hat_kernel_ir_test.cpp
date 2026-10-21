@@ -45,6 +45,20 @@ end
     }
     assert(rejected_call);
 
+    bool public_entry_rejected = false;
+    try {
+        (void)oreslang::parse_program(R"(
+define pub kernel BadVisibility as
+  pub fnc main(int value): int {
+    return value;
+  }
+end
+)");
+    } catch (const std::runtime_error&) {
+        public_entry_rejected = true;
+    }
+    assert(public_entry_rejected);
+
     bool overflow = false;
     try {
         (void)oreslang::hat::execute_cpu_reference(
