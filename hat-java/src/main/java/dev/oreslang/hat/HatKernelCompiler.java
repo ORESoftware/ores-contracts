@@ -108,13 +108,11 @@ public final class HatKernelCompiler {
         if (depth > MAX_EXPRESSION_DEPTH) {
             throw new IllegalArgumentException("HAT v1 kernel expression nesting exceeds 64");
         }
-        if (expression instanceof Ast.LiteralExpr literal && literal.value() instanceof Number number) {
-            double asDouble = number.doubleValue();
-            long asLong = number.longValue();
-            if (!Double.isFinite(asDouble) || asDouble != (double) asLong) {
-                throw new IllegalArgumentException("HAT v1 admits only integral int literals");
-            }
-            return new HatKernelIr.ConstantI64(asLong);
+        if (expression instanceof Ast.LiteralExpr literal && literal.value() instanceof Long value) {
+            return new HatKernelIr.ConstantI64(value);
+        }
+        if (expression instanceof Ast.LiteralExpr) {
+            throw new IllegalArgumentException("HAT v1 admits only source int literals");
         }
         if (expression instanceof Ast.NameExpr name) {
             Integer index = parameterIndices.get(name.name());
