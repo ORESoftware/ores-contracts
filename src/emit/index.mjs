@@ -1,4 +1,5 @@
 import { SCALARS } from '../ir.mjs';
+import { emitAttoLangTarget } from './attolang.mjs';
 
 export const snake = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[-\s]+/g, '_').toLowerCase();
 export const pascal = (s) => s.replace(/(^|[_\-\s]+)([a-zA-Z0-9])/g, (_, __, c) => c.toUpperCase());
@@ -264,4 +265,5 @@ export const EMITTERS = Object.freeze({
   'typescript/types.d.ts': emitTsTypes,
   'typescript/validate.mjs': emitTsValidator,
   'dart/models.dart': emitDart,
+  'attolang/contract-target.json': emitAttoLangTarget,
 });

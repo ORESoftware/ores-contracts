@@ -53,8 +53,8 @@ export function finalize(namespace, enums, models) {
     if (m.primaryKey.length === 0) throw new ContractError('model has no primary key', m.name);
     for (const u of m.unique) for (const k of u) if (!names.has(k)) throw new ContractError(`unique references unknown field ${k}`, m.name);
     for (const f of m.fields) {
-      if (f.enumName && !enums[f.enumName]) throw new ContractError(`unknown enum ${f.enumName}`, `${m.name}.${f.name}`);
-      if (!f.enumName && !SCALARS[f.type]) throw new ContractError(`unsupported type ${f.type}`, `${m.name}.${f.name}`);
+      if (f.enumName && !Object.hasOwn(enums, f.enumName)) throw new ContractError(`unknown enum ${f.enumName}`, `${m.name}.${f.name}`);
+      if (!f.enumName && !Object.hasOwn(SCALARS, f.type)) throw new ContractError(`unsupported type ${f.type}`, `${m.name}.${f.name}`);
       if (f.references) {
         const t = byName.get(f.references.model);
         if (!t) throw new ContractError(`references unknown model ${f.references.model}`, `${m.name}.${f.name}`);
