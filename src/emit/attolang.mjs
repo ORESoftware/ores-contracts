@@ -8,8 +8,14 @@ const SCALAR_TYPES = Object.freeze({
 });
 const RUNTIME_VALIDATORS = Object.freeze({
   uuid: 'uuid', utcDateTime: 'iso-8601-date-time', plainDate: 'iso-8601-date',
+  int32: 'signed-32-bit-range', int64: 'signed-64-bit-range',
+  float64: 'finite-f64', bytes: 'byte-array-0..255',
 });
-function projectField(field) {
+function projectField(field, enums) {
+  if (field.enumName !== null && field.enumName !== undefined
+    && !Object.hasOwn(enums, field.enumName)) {
+    throw new TypeError(`unknown nominal enum ${field.enumName} for AttoLang field ${field.name}`);
+  }
   const base = field.enumName ?? (Object.hasOwn(SCALAR_TYPES, field.type) ? SCALAR_TYPES[field.type] : null);
   const blocked = base === null;
   const elementType = field.array && base ? `Array[${base}]` : base;
@@ -21,7 +27,8 @@ function projectField(field) {
     enumIdentity: field.enumName ?? null,
     nullable: field.nullable,
     array: field.array,
-    runtimeValidation: RUNTIME_VALIDATORS[field.type] ?? null,
+    runtimeValidation: Object.hasOwn(RUNTIME_VALIDATORS, field.type)
+      ? RUNTIME_VALIDATORS[field.type] : null,
     maxLength: field.maxLength,
     references: field.references,
   };
@@ -43,7 +50,9 @@ export function emitAttoLangTarget(contract) {
       name: model.name,
       table: model.table,
       primaryKey: [...model.primaryKey],
-      fields: model.fields.map(projectField),
+      unique: (model.unique ?? []).map((parts) => [...parts]),
+      indexes: (model.indexes ?? []).map((parts) => [...parts]),
+      fields: model.fields.map((field) => projectField(field, contract.enums)),
     })),
   };
   return JSON.stringify(target, null, 2) + '\n';
