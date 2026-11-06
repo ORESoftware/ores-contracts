@@ -5,6 +5,7 @@ import { parseTypeSpec } from '../src/parse-typespec.mjs';
 import { parseJsonSchema } from '../src/parse-json-schema.mjs';
 import { emitAttoLangTarget } from '../src/emit/attolang.mjs';
 import { EMITTERS } from '../src/emit/index.mjs';
+import { field, model, finalize } from '../src/ir.mjs';
 
 const root = new URL('./fixtures/', import.meta.url);
 const tsp = () => parseTypeSpec(readFileSync(new URL('typespec/main.tsp', root), 'utf8'));
@@ -47,4 +48,64 @@ test('AttoLang target types preserve optional, array, enum and validation requir
   assert.equal(target.enums[0].nominal, true);
   assert.equal(fields.opaque.targetType, null);
   assert.equal(fields.opaque.status, 'requires-explicit-type-admission');
+});
+
+test('AttoLang target carries relational uniqueness/index obligations through both authorities', () => {
+  const fromTypeSpec = JSON.parse(emitAttoLangTarget(tsp()));
+  const fromSchema = JSON.parse(emitAttoLangTarget(schema()));
+  assert.deepEqual(fromTypeSpec, fromSchema);
+  const contract = tsp();
+  for (const source of contract.models) {
+    const target = fromTypeSpec.models.find((item) => item.name === source.name);
+    assert.deepEqual(target.primaryKey, source.primaryKey, source.name);
+    assert.deepEqual(target.unique, source.unique, source.name);
+    assert.deepEqual(target.indexes, source.indexes, source.name);
+    assert.deepEqual(target.fields.map(x => x.references), source.fields.map(x => x.references));
+  }
+});
+
+test('AttoLang target declares explicit numeric/byte range obligations rather than inventing runtime proof', () => {
+  const types = ['int32', 'int64', 'float64', 'bytes'];
+  const constraints = ['signed-32-bit-range', 'signed-64-bit-range', 'finite-f64', 'byte-array-0..255'];
+  const models = [{ name: 'Numbers', table: 'numbers', primaryKey: ['id'], fields: [
+    { name: 'id', type: 'uuid', nullable: false, array: false, enumName: null },
+    ...types.map((type, i) => ({
+      name: `value_${i}`, type, nullable: i === 1, array: i === 3, enumName: null,
+    })),
+  ] }];
+  const descriptor = JSON.parse(emitAttoLangTarget({ namespace: 'Testing', enums: {}, models }));
+  const fields = descriptor.models[0].fields.slice(1);
+  assert.deepEqual(fields.map(x => x.runtimeValidation), constraints);
+  assert.equal(fields[1].targetType, 'Option<int>');
+  assert.equal(fields[3].targetType, 'Array[Array[u8]]');
+  assert.equal(descriptor.proofStatus, 'NOT_EXECUTED');
+});
+
+test('inherited JavaScript prototype properties are not valid TypeSpec/JSON Schema scalar or enum names', () => {
+  const base = field({ name: 'id', type: 'uuid' });
+  for (const badType of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const unsupported = field({ name: 'value', type: badType });
+    assert.throws(() => finalize('X', {}, [model({
+      name: 'Item', table: 'items', primaryKey: ['id'], fields: [base, unsupported],
+    })]), /unsupported type/, badType);
+    const target = JSON.parse(emitAttoLangTarget({
+      namespace: 'X', enums: {}, models: [{
+        name: 'Item', table: 'items', primaryKey: ['id'],
+        fields: [{ name: 'value', type: badType, enumName: null, array: false, nullable: false }],
+      }],
+    }));
+    assert.equal(target.models[0].fields[0].status, 'requires-explicit-type-admission');
+    assert.equal(target.models[0].fields[0].runtimeValidation, null);
+    assert.equal(target.models[0].fields[0].targetType, null);
+  }
+  for (const enumName of ['constructor', '__proto__', 'toString']) {
+    const enumField = field({ name: 'mode', type: 'string', enumName });
+    assert.throws(() => finalize('X', {}, [model({
+      name: 'Item', table: 'items', primaryKey: ['id'], fields: [base, enumField],
+    })]), /unknown enum/, enumName);
+    assert.throws(() => emitAttoLangTarget({ namespace: 'X', enums: {}, models: [{
+      name: 'Item', table: 'items', primaryKey: ['id'],
+      fields: [{ name: 'mode', type: 'string', enumName, array: false, nullable: false }],
+    }] }), /unknown nominal enum/, enumName);
+  }
 });
