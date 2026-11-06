@@ -10,7 +10,7 @@ const RUNTIME_VALIDATORS = Object.freeze({
   uuid: 'uuid', utcDateTime: 'iso-8601-date-time', plainDate: 'iso-8601-date',
 });
 function projectField(field) {
-  const base = field.enumName ?? SCALAR_TYPES[field.type] ?? null;
+  const base = field.enumName ?? (Object.hasOwn(SCALAR_TYPES, field.type) ? SCALAR_TYPES[field.type] : null);
   const blocked = base === null;
   const elementType = field.array && base ? `Array[${base}]` : base;
   return {
