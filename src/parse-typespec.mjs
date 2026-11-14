@@ -261,7 +261,7 @@ export function parseTypeSpec(source, where = 'main.tsp') {
   const ns = masked.match(/\bnamespace\s+([A-Za-z_][A-Za-z0-9_.]*)\s*;/);
   if (!ns) throw new ContractError('missing `namespace X;`', where);
 
-  const enums = {};
+  const enums = Object.create(null);
   ENUM_HEADER_RE.lastIndex = 0;
   let enumMatch;
   while ((enumMatch = ENUM_HEADER_RE.exec(masked)) !== null) {
@@ -322,11 +322,11 @@ export function parseTypeSpec(source, where = 'main.tsp') {
       const maxLengthDecorator = atMostOneDecorator(fd, ['maxLength', 'TypeSpec.maxLength'], '@maxLength', fieldWhere);
       const fieldDocDecorator = atMostOneDecorator(fd, ['doc', 'TypeSpec.doc'], '@doc', fieldWhere);
       const recordValue = recordValueType(typeExpr);
-      const isEnum = !recordValue && !!enums[typeExpr];
+      const isEnum = !recordValue && Object.hasOwn(enums, typeExpr);
       let persistenceType = null;
       if (recordValue) {
-        const recordValueIsEnum = !!enums[recordValue];
-        if (recordValue !== 'unknown' && !recordValueIsEnum && !SCALARS[recordValue]) {
+        const recordValueIsEnum = Object.hasOwn(enums, recordValue);
+        if (recordValue !== 'unknown' && !recordValueIsEnum && !Object.hasOwn(SCALARS, recordValue)) {
           throw new ContractError(`unsupported Record value type ${recordValue}`, `${where}:${name}.${fname}`);
         }
         if (arr) throw new ContractError('arrays of Record<T> are outside the supported subset', `${where}:${name}.${fname}`);
@@ -335,7 +335,7 @@ export function parseTypeSpec(source, where = 'main.tsp') {
         persistenceType = 'enum';
       } else {
         persistenceType = persistenceScalar(typeExpr, fd, `${where}:${name}.${fname}`);
-        if (!SCALARS[persistenceType]) throw new ContractError(`unsupported type ${typeExpr}`, `${where}:${name}.${fname}`);
+        if (!Object.hasOwn(SCALARS, persistenceType)) throw new ContractError(`unsupported type ${typeExpr}`, `${where}:${name}.${fname}`);
       }
       if (keyDecorator) primaryKey.push(fname);
       const refTarget = ref ? oneArgument(ref, '@Ores.references', fieldWhere) : null;

@@ -32,7 +32,7 @@ export function parseJsonSchema(doc, where = 'schema.json') {
   const defs = doc.$defs;
   if (!defs || typeof defs !== 'object') throw new ContractError('missing $defs', where);
 
-  const enums = {};
+  const enums = Object.create(null);
   for (const [name, s] of Object.entries(defs)) {
     if (Array.isArray(s.enum)) {
       if (s.type !== 'string' || !s.enum.every((v) => typeof v === 'string') || !s.enum.length) throw new ContractError('enum must be a non-empty string enum', `${where}:$defs.${name}`);
@@ -58,7 +58,7 @@ export function parseJsonSchema(doc, where = 'schema.json') {
       let type; let enumName = null; let enumValues = [];
       if (typeof p.$ref === 'string') {
         const ref = p.$ref.replace(/^#\/\$defs\//, '');
-        if (!enums[ref]) throw new ContractError(`$ref must point at an enum in $defs (got ${p.$ref})`, w);
+        if (!Object.hasOwn(enums, ref)) throw new ContractError(`$ref must point at an enum in $defs (got ${p.$ref})`, w);
         type = 'enum'; enumName = ref; enumValues = enums[ref];
       } else type = scalarOf(p, w);
       const refSpec = p0['x-ores-references'] ?? p['x-ores-references'] ?? null;
