@@ -30,8 +30,12 @@ jobs:
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Set up supported Node.js for pinned TJSV action
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.18.0
       - name: Check independent review contract authorities
-        uses: ORESoftware/typespec-json-schema-validator@a433a3e6c79a95986320d1d875a066b7e30d9420
+        uses: ORESoftware/typespec-json-schema-validator@f386c78e44c93309029e186799d926c652cb0d96
         with:
           typespec: contracts/implementation-deviation-review/main.tsp
           schema: contracts/implementation-deviation-review/authored.schema.json
